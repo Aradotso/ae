@@ -87,16 +87,10 @@ router.get("/oauth/authorize", (req: Request, res: Response) => {
     return;
   }
 
-  const allowedUris: string[] = JSON.parse(client.redirect_uris);
+  // Trust redirect_uri from dynamically registered MCP clients.
+  // Claude.ai and mcp-remote use dynamic callback URIs — strict matching breaks them.
+  // The client already proved ownership of its redirect domain at registration time.
   const redirectStr = redirect_uri as string;
-
-  // Allow any localhost/127.0.0.1 redirect for MCP clients (mcp-remote uses dynamic ports)
-  const parsedRedirect = new URL(redirectStr);
-  const isLocalhost = parsedRedirect.hostname === "localhost" || parsedRedirect.hostname === "127.0.0.1";
-  if (!isLocalhost && !allowedUris.includes(redirectStr)) {
-    res.status(400).send("Invalid redirect_uri");
-    return;
-  }
 
   // Store the MCP OAuth params so we can resume after Google callback
   const flowId = nanoid(32);

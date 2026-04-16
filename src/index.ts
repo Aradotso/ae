@@ -22,6 +22,14 @@ app.use((req, res, next) => {
   express.urlencoded({ extended: true })(req, res, next);
 });
 
+// ─── Request logging ───
+app.use((req, _res, next) => {
+  if (req.path !== "/health") {
+    console.log(`${req.method} ${req.path} ${req.query ? JSON.stringify(req.query) : ""}`);
+  }
+  next();
+});
+
 // ─── OAuth routes (unauthenticated) ───
 app.use(oauthRouter);
 
