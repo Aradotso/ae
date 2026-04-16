@@ -6,6 +6,12 @@ import oauthRouter from "./auth/oauth.js";
 import { requireAuth, type AuthenticatedRequest } from "./middleware/auth.js";
 import { registerInstacartTools } from "./tools/instacart.js";
 import { registerHiggsFieldTools } from "./tools/higgsfield.js";
+import { registerRailwayTools } from "./tools/railway.js";
+import { registerBlaxelTools } from "./tools/blaxel.js";
+import { registerResendTools } from "./tools/resend.js";
+import { registerEngainTools } from "./tools/engain.js";
+import { registerLinqTools } from "./tools/linq.js";
+import { registerPostizTools } from "./tools/postiz.js";
 import { registerPrompts } from "./prompts/index.js";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -52,6 +58,12 @@ function createMcpSession(): { server: McpServer; transport: StreamableHTTPServe
 
   registerInstacartTools(server);
   registerHiggsFieldTools(server);
+  registerRailwayTools(server);
+  registerBlaxelTools(server);
+  registerResendTools(server);
+  registerEngainTools(server);
+  registerLinqTools(server);
+  registerPostizTools(server);
   registerPrompts(server);
 
   const transport = new StreamableHTTPServerTransport({
