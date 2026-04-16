@@ -18,6 +18,17 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   }
 
   const token = authHeader.slice(7);
+
+  // Allow proxy/service-to-service auth via shared secret
+  const proxySecret = process.env.PROXY_SECRET;
+  if (proxySecret && token === proxySecret) {
+    req.userId = "proxy";
+    req.clientId = "proxy";
+    req.scope = "mcp:tools mcp:prompts mcp:resources";
+    next();
+    return;
+  }
+
   const record = getToken(token);
   if (!record) {
     res.status(401).json({
