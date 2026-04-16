@@ -10,15 +10,18 @@ import { registerPrompts } from "./prompts/index.js";
 
 const PORT = Number(process.env.PORT) || 3000;
 
+// MCP paths — Claude.ai sends requests to "/" while direct connections use "/mcp"
+const MCP_PATHS = new Set(["/", "/mcp"]);
+
 // ─── Express app ───
 const app = express();
-// Parse JSON/form bodies for all routes EXCEPT /mcp (MCP transport reads raw body)
+// Parse JSON/form bodies for all routes EXCEPT MCP paths (MCP transport reads raw body)
 app.use((req, res, next) => {
-  if (req.path === "/mcp") return next();
+  if (MCP_PATHS.has(req.path)) return next();
   express.json()(req, res, next);
 });
 app.use((req, res, next) => {
-  if (req.path === "/mcp") return next();
+  if (MCP_PATHS.has(req.path)) return next();
   express.urlencoded({ extended: true })(req, res, next);
 });
 
@@ -39,9 +42,6 @@ app.get("/health", (_req, res) => {
 });
 
 // ─── MCP over Streamable HTTP ───
-// We create a new MCP server + transport per session.
-// The transport handles POST/GET/DELETE on the /mcp path.
-
 const sessions = new Map<string, { server: McpServer; transport: StreamableHTTPServerTransport }>();
 
 function createMcpSession(): { server: McpServer; transport: StreamableHTTPServerTransport } {
@@ -50,7 +50,6 @@ function createMcpSession(): { server: McpServer; transport: StreamableHTTPServe
     version: "1.0.0",
   });
 
-  // Register all tools and prompts
   registerInstacartTools(server);
   registerHiggsFieldTools(server);
   registerPrompts(server);
@@ -60,13 +59,11 @@ function createMcpSession(): { server: McpServer; transport: StreamableHTTPServe
   });
 
   server.connect(transport);
-
   return { server, transport };
 }
 
-// MCP endpoint — auth required
-app.all("/mcp", requireAuth, async (req: AuthenticatedRequest, res) => {
-  // Check for existing session
+// MCP handler — shared between "/" and "/mcp"
+async function handleMcp(req: AuthenticatedRequest, res: express.Response) {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
   if (sessionId && sessions.has(sessionId)) {
@@ -75,7 +72,6 @@ app.all("/mcp", requireAuth, async (req: AuthenticatedRequest, res) => {
     return;
   }
 
-  // New session (only on POST with initialize)
   if (req.method === "POST") {
     const { server, transport } = createMcpSession();
 
@@ -86,21 +82,23 @@ app.all("/mcp", requireAuth, async (req: AuthenticatedRequest, res) => {
 
     await transport.handleRequest(req, res);
 
-    // After handling, the transport will have a session ID
     if (transport.sessionId) {
       sessions.set(transport.sessionId, { server, transport });
     }
     return;
   }
 
-  // GET/DELETE without valid session
   res.status(400).json({ error: "No valid session. Send a POST with an initialize request first." });
-});
+}
+
+// Serve MCP on both "/" and "/mcp" — Claude.ai uses "/", direct clients use "/mcp"
+app.all("/mcp", requireAuth, handleMcp);
+app.all("/", requireAuth, handleMcp);
 
 // ─── Start ───
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Ara Connectors MCP server running on port ${PORT}`);
   console.log(`  OAuth discovery: /.well-known/oauth-authorization-server`);
-  console.log(`  MCP endpoint:    /mcp`);
+  console.log(`  MCP endpoint:    / and /mcp`);
   console.log(`  Health:          /health`);
 });
