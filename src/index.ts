@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import oauthRouter from "./auth/oauth.js";
 import { requireAuth, type AuthenticatedRequest } from "./middleware/auth.js";
-import { registerDoorDashTools } from "./tools/doordash.js";
+import { registerInstacartTools } from "./tools/instacart.js";
 import { registerHiggsFieldTools } from "./tools/higgsfield.js";
 import { registerPrompts } from "./prompts/index.js";
 
@@ -36,7 +36,7 @@ function createMcpSession(): { server: McpServer; transport: StreamableHTTPServe
   });
 
   // Register all tools and prompts
-  registerDoorDashTools(server);
+  registerInstacartTools(server);
   registerHiggsFieldTools(server);
   registerPrompts(server);
 
