@@ -228,7 +228,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
         const panes = await cmuxJson(["list-panes", "--workspace", WS]);
         const leftSurface = panes.panes[0].surface_refs?.[0];
         if (leftSurface) {
-          await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions\n`]);
+          await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions --name "${NAME}"\n`]);
         }
       }
     }
@@ -534,7 +534,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
       const leftPanes = await cmuxJson(["list-panes", "--workspace", WS]);
       const leftSurface = leftPanes.panes[0].surface_refs?.[0];
       if (leftSurface) {
-        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions\n`]);
+        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions --name "agent-${N}"\n`]);
         await cmuxCall(["focus-panel", "--panel", leftSurface]);
         // Wait for Claude to fully render its input prompt, then send the
         // orientation message and a separate \n so Enter actually submits.
