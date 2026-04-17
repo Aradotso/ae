@@ -96,9 +96,16 @@ async function runCapture(cmd: string[], opts: { cwd?: string } = {}): Promise<{
   return { code, stdout, stderr };
 }
 
+function formatCmd(cmd: string[]): string {
+  return cmd.map((arg) => JSON.stringify(arg)).join(" ");
+}
+
 async function mustCapture(cmd: string[], opts: { cwd?: string } = {}): Promise<string> {
   const r = await runCapture(cmd, opts);
-  if (r.code !== 0) throw new Error(`${cmd.join(" ")} failed (${r.code}): ${r.stderr}`);
+  if (r.code !== 0) {
+    const details = r.stderr.trim() || r.stdout.trim() || "no output";
+    throw new Error(`${formatCmd(cmd)} failed (${r.code}): ${details}`);
+  }
   return r.stdout.trim();
 }
 
@@ -108,6 +115,25 @@ async function resolveRepoRoot(): Promise<string> {
   const r = await runCapture(["git", "rev-parse", "--git-common-dir"]);
   if (r.code === 0 && r.stdout.trim()) return resolve(r.stdout.trim(), "..");
   return resolve(homedir(), "lab/Ara");
+}
+
+async function branchExists(repoRoot: string, branchName: string): Promise<boolean> {
+  const r = await runCapture(["git", "show-ref", "--verify", "--quiet", `refs/heads/${branchName}`], { cwd: repoRoot });
+  return r.code === 0;
+}
+
+async function resolveWorktreeTarget(repoRoot: string, wtRoot: string, requestedName: string): Promise<{ name: string; branch: string; wtPath: string }> {
+  let candidate = requestedName;
+  let n = 2;
+  while (true) {
+    const branch = `wt/${candidate}`;
+    const wtPath = resolve(wtRoot, candidate);
+    if (!existsSync(wtPath) && !(await branchExists(repoRoot, branch))) {
+      return { name: candidate, branch, wtPath };
+    }
+    candidate = `${requestedName}-${n}`;
+    n += 1;
+  }
 }
 
 // ─── port allocation ─────────────────────────────────────────────────────────
@@ -236,10 +262,18 @@ export async function wtCommand(argv: string[]): Promise<number> {
 
   ensureRemoteControlAtStartup();
 
-  const NAME = args.name;
+  const REQUESTED_NAME = args.name;
   const REPO = await resolveRepoRoot();
-  const WT = resolve(REPO, ".worktrees", NAME);
+  const WT_ROOT = resolve(REPO, ".worktrees");
+  const target = await resolveWorktreeTarget(REPO, WT_ROOT, REQUESTED_NAME);
+  const NAME = target.name;
+  const BRANCH = target.branch;
+  const WT = target.wtPath;
   const isAraMonorepo = existsSync(resolve(REPO, "app.ara.so"));
+
+  if (NAME !== REQUESTED_NAME) {
+    console.log(`[wt] name "${REQUESTED_NAME}" is in use; using "${NAME}"`);
+  }
 
   // Sync origin/main without touching the checked-out branch (avoids "refusing
   // to fetch into branch checked out" error when main is the current branch).
@@ -249,7 +283,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
     console.warn(`[wt] warning: could not sync main (${fetchResult.stderr.trim()}); proceeding with local HEAD`);
   }
 
-  await mustCapture(["git", "worktree", "add", WT, "-b", `wt/${NAME}`, "origin/main"], { cwd: REPO });
+  await mustCapture(["git", "worktree", "add", WT, "-b", BRANCH, "origin/main"], { cwd: REPO });
 
   if (!isAraMonorepo) {
     // Simple worktree for non-Ara repos — no services, ports, or Supabase.
@@ -264,7 +298,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
     }
 
     console.log(`worktree:  ${WT}`);
-    console.log(`branch:    wt/${NAME}`);
+    console.log(`branch:    ${BRANCH}`);
 
     if (!args.noClaude && cmuxAvailable()) {
       const WS = await createCmuxWorkspace(NAME);
@@ -280,8 +314,6 @@ export async function wtCommand(argv: string[]): Promise<number> {
   }
 
   const NGROK_PREFIX = process.env.WT_NGROK_PREFIX || "ae";
-  const WT_ROOT = resolve(REPO, ".worktrees");
-
   // Before computing the next agent number, sweep abandoned worktrees:
   // any worktree whose ports are all dead and has no open/draft PR gets
   // removed so its slot is freed and numbers stay low.
@@ -610,7 +642,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
   }
 
   console.log(`worktree:  ${WT}`);
-  console.log(`branch:    wt/${NAME}`);
+  console.log(`branch:    ${BRANCH}`);
   console.log(`agent:     ${N} (${DEV_EMAIL})`);
   console.log(`app:       http://localhost:${APP}   →  https://${APP_DOMAIN}`);
   console.log(`marketing: http://localhost:${MKT}   →  https://${MKT_DOMAIN}`);
