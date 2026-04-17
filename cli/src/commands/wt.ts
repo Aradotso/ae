@@ -186,14 +186,15 @@ export async function wtCommand(argv: string[]): Promise<number> {
   const WT = resolve(REPO, ".worktrees", NAME);
   const isAraMonorepo = existsSync(resolve(REPO, "app.ara.so"));
 
-  // Sync local main with origin so every new worktree starts from the latest commit.
+  // Sync origin/main without touching the checked-out branch (avoids "refusing
+  // to fetch into branch checked out" error when main is the current branch).
   console.log("[wt] syncing main with origin...");
-  const fetchResult = await runCapture(["git", "fetch", "origin", "main:main"], { cwd: REPO });
+  const fetchResult = await runCapture(["git", "fetch", "origin", "main"], { cwd: REPO });
   if (fetchResult.code !== 0) {
     console.warn(`[wt] warning: could not sync main (${fetchResult.stderr.trim()}); proceeding with local HEAD`);
   }
 
-  await mustCapture(["git", "worktree", "add", WT, "-b", `wt/${NAME}`, "main"], { cwd: REPO });
+  await mustCapture(["git", "worktree", "add", WT, "-b", `wt/${NAME}`, "origin/main"], { cwd: REPO });
 
   if (!isAraMonorepo) {
     // Simple worktree for non-Ara repos — no services, ports, or Supabase.
@@ -386,6 +387,8 @@ export async function wtCommand(argv: string[]): Promise<number> {
 
   // ─── layout ──────────────────────────────────────────────────────────────
   let exec: string;
+  let _WS: string | null = null;
+  let _BROWSER: string | null = null;
   if (cmuxAvailable()) {
     // Build an isolated workspace for this agent and lay out:
     //   [ pane_L (empty terminal) ] [ pane_TR (browser) ]
@@ -449,6 +452,8 @@ export async function wtCommand(argv: string[]): Promise<number> {
       }
     }
 
+    _WS = WS;
+    _BROWSER = BROWSER;
     exec = `cmux ws=${WS} browser=${BROWSER} app=${S1} mkt=${S2} api=${S3} ngrok=${S4}`;
   } else {
     const LOG = `/tmp/wt-${NAME}`;
@@ -460,6 +465,11 @@ export async function wtCommand(argv: string[]): Promise<number> {
   }
 
   if (ngNeedsReady) await waitForNgrokReady(30);
+
+  // Reload browser now that ngrok tunnels are up and services are starting.
+  if (_WS && _BROWSER) {
+    await cmuxCall(["navigate", "--workspace", _WS, "--surface", _BROWSER, "--url", `https://${APP_DOMAIN}`]);
+  }
 
   console.log(`worktree:  ${WT}`);
   console.log(`branch:    wt/${NAME}`);
