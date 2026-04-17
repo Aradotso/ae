@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { wtCommand } from "./commands/wt.ts";
 import { prCommand } from "./commands/pr.ts";
+import { pollCommand } from "./commands/poll.ts";
 import { prrCommand } from "./commands/prr.ts";
 import { sessionsCommand } from "./commands/sessions.ts";
 import { statusCommand } from "./commands/status.ts";
@@ -63,6 +64,11 @@ const coreCommands: NativeCommand[] = [
     name: "pr",
     summary: "Create a PR, watch for bot/agent review comments, then auto-fix",
     run: prCommand,
+  },
+  {
+    name: "poll",
+    summary: "Watch Linear: spawn ae wt for In Progress issues, track PR → In Review → Done",
+    run: pollCommand,
   },
   {
     name: "prr",
