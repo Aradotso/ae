@@ -194,6 +194,37 @@ async function cmuxCall(args: string[]): Promise<string> {
   return r.stdout;
 }
 
+async function cmuxNewSplit(direction: "left" | "right" | "up" | "down", workspace: string, anchorSurface: string, anchorPane?: string): Promise<any> {
+  const attempts: string[][] = [
+    ["cmux", "--json", "new-split", direction, "--workspace", workspace, "--surface", anchorSurface],
+  ];
+  if (anchorPane) attempts.push(["cmux", "--json", "new-split", direction, "--workspace", workspace, "--panel", anchorPane]);
+  // Some cmux builds route --panel through surface refs internally.
+  attempts.push(["cmux", "--json", "new-split", direction, "--workspace", workspace, "--panel", anchorSurface]);
+
+  const errors: string[] = [];
+  for (const cmd of attempts) {
+    const r = await runCapture(cmd);
+    if (r.code === 0) return JSON.parse(r.stdout);
+    errors.push(`${cmd.slice(2).join(" ")} => ${r.stderr.trim() || `exit ${r.code}`}`);
+  }
+
+  throw new Error(`cmux split failed: ${errors.join(" | ")}`);
+}
+
+function workspaceRefFromOutput(raw: string): string | null {
+  const m = raw.match(/workspace:\d+/);
+  return m ? m[0] : null;
+}
+
+async function createCmuxWorkspace(title: string): Promise<string> {
+  const wsRaw = await mustCapture(["cmux", "new-workspace"]);
+  const ws = workspaceRefFromOutput(wsRaw);
+  if (!ws) throw new Error(`cmux new-workspace failed: ${wsRaw}`);
+  if (title) await runCapture(["cmux", "rename-workspace", "--workspace", ws, title]);
+  return ws;
+}
+
 // ─── the command ─────────────────────────────────────────────────────────────
 
 export async function wtCommand(argv: string[]): Promise<number> {
@@ -236,15 +267,11 @@ export async function wtCommand(argv: string[]): Promise<number> {
     console.log(`branch:    wt/${NAME}`);
 
     if (!args.noClaude && cmuxAvailable()) {
-      const wsRaw = await mustCapture(["cmux", "new-workspace", "--name", NAME]);
-      const wsMatch = wsRaw.match(/workspace:\d+/);
-      if (wsMatch) {
-        const WS = wsMatch[0];
-        const panes = await cmuxJson(["list-panes", "--workspace", WS]);
-        const leftSurface = panes.panes[0].surface_refs?.[0];
-        if (leftSurface) {
-          await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions --name "${NAME}"\n`]);
-        }
+      const WS = await createCmuxWorkspace(NAME);
+      const panes = await cmuxJson(["list-panes", "--workspace", WS]);
+      const leftSurface = panes.panes[0].surface_refs?.[0];
+      if (leftSurface) {
+        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions --name "${NAME}"\n`]);
       }
     }
 
@@ -495,18 +522,17 @@ export async function wtCommand(argv: string[]): Promise<number> {
     // Every cmux command carries --workspace so nothing leaks into Claude's
     // workspace — learned the hard way: --surface alone still uses
     // $CMUX_WORKSPACE_ID to route the split.
-    const wsRaw = await mustCapture(["cmux", "new-workspace", "--name", `agent-${N}`]);
-    const wsMatch = wsRaw.match(/workspace:\d+/);
-    if (!wsMatch) throw new Error(`cmux new-workspace failed: ${wsRaw}`);
-    const WS = wsMatch[0];
+    const WS = await createCmuxWorkspace(`agent-${N}`);
 
     const panes = await cmuxJson(["list-panes", "--workspace", WS]);
     const PANE_L = panes.panes[0].ref as string;
+    const LEFT_SURFACE = panes.panes[0].surface_refs?.[0] as string | undefined;
+    if (!LEFT_SURFACE) throw new Error(`cmux list-panes returned no surfaces for ${WS}`);
 
     // Right column: new-split right creates a pane with a default terminal
     // surface — we capture that ref so we can drop it after adding the
     // browser (keeps the browser as the only tab, auto-selected on focus).
-    const trSplit = await cmuxJson(["new-split", "right", "--workspace", WS, "--panel", PANE_L]);
+    const trSplit = await cmuxNewSplit("right", WS, LEFT_SURFACE, PANE_L);
     const TR_DEFAULT = trSplit.surface_ref as string;
     const PANE_TR = trSplit.pane_ref as string;
     const browserOut = await cmuxJson(["new-surface", "--type", "browser", "--pane", PANE_TR, "--workspace", WS, "--url", `https://${APP_DOMAIN}`]);
@@ -515,7 +541,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
 
     // Bottom-right pane for services: split down from PANE_TR. The default
     // terminal in the split becomes service #1 (app).
-    const brSplit = await cmuxJson(["new-split", "down", "--workspace", WS, "--panel", PANE_TR]);
+    const brSplit = await cmuxNewSplit("down", WS, BROWSER, PANE_TR);
     const S1 = brSplit.surface_ref as string;
     const PANE_BR = brSplit.pane_ref as string;
     const s2 = await cmuxJson(["new-surface", "--type", "terminal", "--pane", PANE_BR, "--workspace", WS]);
@@ -550,7 +576,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
       const leftSurface = leftPanes.panes[0].surface_refs?.[0];
       if (leftSurface) {
         await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions --name "agent-${N}"\n`]);
-        await cmuxCall(["focus-panel", "--panel", leftSurface]);
+        await cmuxCall(["focus-panel", "--workspace", WS, "--panel", leftSurface]);
         // Wait for Claude to fully render its input prompt, then send the
         // orientation message and a separate \n so Enter actually submits.
         const taskLine = args.task ? `\n\nYour task: ${args.task}` : "";
