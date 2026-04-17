@@ -1,7 +1,7 @@
 // ae poll — watch Linear for In Progress issues assigned to Adi, spawn ae wt,
 // then track PR lifecycle: open → In Review, merged → Done.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -106,8 +106,8 @@ function spawnWt(title: string): void {
       PATH: `${homedir()}/.bun/bin:${homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
       HOME: homedir(),
     },
-    stdout: Bun.file("/tmp/ae-wt-spawn.log"),
-    stderr: Bun.file("/tmp/ae-wt-spawn.log"),
+    stdout: openSync("/tmp/ae-wt-spawn.log", "a"),
+    stderr: openSync("/tmp/ae-wt-spawn.log", "a"),
   });
   child.unref(); // don't block the poll loop
 }
