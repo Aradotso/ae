@@ -461,13 +461,17 @@ export async function wtCommand(argv: string[]): Promise<number> {
 
     writeWorktreeContext({ name: NAME, wt: WT, n: N, devEmail: DEV_EMAIL, devPassword: DEV_TEST_PASSWORD, app: APP, mkt: MKT, api: API, appDomain: APP_DOMAIN, mktDomain: MKT_DOMAIN, apiDomain: API_DOMAIN, ws: WS, browser: BROWSER, s1: S1, s2: S2, s3: S3, s4: S4 });
 
-    // Auto-spawn claude in the left pane (was the ccwt alias).
+    // Auto-spawn claude in the left pane and send an initial prompt so it
+    // immediately reads CLAUDE.md and orients itself without the user having to ask.
     if (!args.noClaude) {
       const leftPanes = await cmuxJson(["list-panes", "--workspace", WS]);
       const leftSurface = leftPanes.panes[0].surface_refs?.[0];
       if (leftSurface) {
         await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions\n`]);
         await cmuxCall(["focus-panel", "--panel", leftSurface]);
+        // Wait for Claude to start, then send the orientation prompt.
+        await Bun.sleep(4000);
+        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `Read CLAUDE.md — it has your full environment context (ports, ngrok URLs, browser surface, axiom queries scoped to your test user). Then tell me what branch we're on and what's already been committed, so we know where to start.\n`]);
       }
     }
 
