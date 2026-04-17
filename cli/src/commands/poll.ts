@@ -5,8 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 
-// ─── hardcoded Linear IDs (Ara workspace) ────────────────────────────────────
-const LINEAR_USER_ID = "a6217c40-e40f-4cb6-8608-814a2ff16083";
+// ─── Linear IDs (Ara workspace) ──────────────────────────────────────────────
 const STATE_IN_PROGRESS = "414a4dc5-5be4-4144-b912-fc2412dab51c";
 const STATE_IN_REVIEW = "ef4c2075-b93d-4a8a-87c2-0b2d632481a7";
 const STATE_DONE = "2d48ea35-d79a-47fb-a3f1-c94fb29e2592";
@@ -57,10 +56,15 @@ async function linearGql(apiKey: string, query: string, variables?: Record<strin
   return json.data;
 }
 
-async function getInProgressIssues(apiKey: string): Promise<Array<{ id: string; identifier: string; title: string }>> {
+async function getViewerId(apiKey: string): Promise<string> {
+  const data = await linearGql(apiKey, `{ viewer { id } }`);
+  return data.viewer.id;
+}
+
+async function getInProgressIssues(apiKey: string, userId: string): Promise<Array<{ id: string; identifier: string; title: string }>> {
   const data = await linearGql(apiKey, `{
     issues(filter: {
-      assignee: { id: { eq: "${LINEAR_USER_ID}" } }
+      assignee: { id: { eq: "${userId}" } }
       state: { id: { eq: "${STATE_IN_PROGRESS}" } }
     }, first: 50) {
       nodes { id identifier title }
@@ -139,10 +143,10 @@ function spawnWt(title: string): void {
 
 // ─── core poll ────────────────────────────────────────────────────────────────
 
-async function pollOnce(apiKey: string): Promise<void> {
+async function pollOnce(apiKey: string, userId: string): Promise<void> {
   const state = loadState();
 
-  const activeIssues = await getInProgressIssues(apiKey);
+  const activeIssues = await getInProgressIssues(apiKey, userId);
   const activeIds = new Set(activeIssues.map(i => i.id));
 
   // Spawn ae wt for any newly In Progress issues
@@ -316,9 +320,10 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
     process.on("SIGINT",  () => { console.error("[poll] SIGINT received");  process.exit(0); });
     process.on("uncaughtException", (e) => console.error("[poll] uncaughtException:", e.message));
     process.on("unhandledRejection", (r) => console.error("[poll] unhandledRejection:", r));
-    console.log(`[poll] daemon started — polling every 5s`);
+    const userId = await getViewerId(apiKey);
+    console.log(`[poll] daemon started — polling every 5s (viewer: ${userId})`);
     while (true) {
-      try { await pollOnce(apiKey); }
+      try { await pollOnce(apiKey, userId); }
       catch (e) { console.error("[poll] error:", (e as Error).message); }
       await Bun.sleep(5_000);
     }
