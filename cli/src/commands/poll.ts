@@ -63,15 +63,36 @@ function titleToBranch(title: string): string {
 }
 
 async function linearGql(apiKey: string, query: string, variables?: Record<string, unknown>): Promise<any> {
-  const res = await fetch("https://api.linear.app/graphql", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: apiKey },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  const json = await res.json() as any;
-  if (json.errors) throw new Error(json.errors[0]?.message ?? "Linear API error");
-  return json.data;
+  let delay = 2_000;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: apiKey },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    // Rate limited — back off and retry
+    if (res.status === 429 || res.status === 503) {
+      const retryAfter = parseInt(res.headers.get("retry-after") ?? "0", 10);
+      const wait = retryAfter > 0 ? retryAfter * 1000 : delay;
+      console.error(`[poll] rate limited (${res.status}), retrying in ${wait / 1000}s…`);
+      await Bun.sleep(wait);
+      delay *= 2;
+      continue;
+    }
+    const json = await res.json() as any;
+    if (json.errors) {
+      const msg = json.errors[0]?.message ?? "Linear API error";
+      if (msg.includes("rate") || msg.includes("limit")) {
+        await Bun.sleep(delay);
+        delay *= 2;
+        continue;
+      }
+      throw new Error(msg);
+    }
+    return json.data;
+  }
+  throw new Error("Linear API rate limit exceeded after retries");
 }
 
 async function getViewerId(apiKey: string): Promise<string> {
@@ -417,7 +438,7 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
     while (true) {
       try { await pollOnce(apiKey, userId); }
       catch (e) { console.error("[poll] error:", (e as Error).message); }
-      await Bun.sleep(5_000);
+      await Bun.sleep(15_000);
     }
   }
 
