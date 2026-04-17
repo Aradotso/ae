@@ -23,6 +23,7 @@ export type WorktreeContext = {
   s2: string;
   s3: string;
   s4: string;
+  s5: string;
 };
 
 export function writeWorktreeContext(ctx: WorktreeContext): void {
@@ -49,12 +50,13 @@ ${ctx.task ? `\n## Task\n\n${ctx.task}\n` : ""}
 
 ## Services (right pane, bottom tabs)
 
-| Tab | Service   | Local                       | Public (ngrok)                  | Cmux surface |
-|-----|-----------|-----------------------------|---------------------------------|--------------|
-| 1   | App       | http://localhost:${ctx.app} | https://${ctx.appDomain}        | \`${ctx.s1}\` |
-| 2   | Marketing | http://localhost:${ctx.mkt} | https://${ctx.mktDomain}        | \`${ctx.s2}\` |
-| 3   | API       | http://localhost:${ctx.api} | https://${ctx.apiDomain}        | \`${ctx.s3}\` |
-| 4   | Ngrok     | http://127.0.0.1:4040       | —                               | \`${ctx.s4}\` |
+| Tab | Service        | Local                       | Public (ngrok)                  | Cmux surface |
+|-----|----------------|-----------------------------|---------------------------------|--------------|
+| 1   | App            | http://localhost:${ctx.app} | https://${ctx.appDomain}        | \`${ctx.s1}\` |
+| 2   | Marketing      | http://localhost:${ctx.mkt} | https://${ctx.mktDomain}        | \`${ctx.s2}\` |
+| 3   | API            | http://localhost:${ctx.api} | https://${ctx.apiDomain}        | \`${ctx.s3}\` |
+| 4   | Ngrok          | http://127.0.0.1:4040       | —                               | \`${ctx.s4}\` |
+| 5   | Remote Control | claude.ai/code              | session: agent-${ctx.n}         | \`${ctx.s5}\` |
 
 **Always use ngrok URLs** when testing webhooks, OAuth redirects, or anything that needs a public URL.
 **Always use localhost** for direct API calls from this machine.

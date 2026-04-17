@@ -509,6 +509,8 @@ export async function wtCommand(argv: string[]): Promise<number> {
     const S3 = s3.surface_ref as string;
     const s4 = await cmuxJson(["new-surface", "--type", "terminal", "--pane", PANE_BR, "--workspace", WS]);
     const S4 = s4.surface_ref as string;
+    const s5 = await cmuxJson(["new-surface", "--type", "terminal", "--pane", PANE_BR, "--workspace", WS]);
+    const S5 = s5.surface_ref as string;
 
     // Resize: browser area ≈ 70% width × 70% height. Default splits are 50/50.
     // --amount is pixels (confirmed empirically), so grow PANE_TR left ~240px
@@ -518,6 +520,8 @@ export async function wtCommand(argv: string[]): Promise<number> {
     await cmuxCall(["resize-pane", "--workspace", WS, "--pane", PANE_TR, "-L", "--amount", "240"]);
     await cmuxCall(["resize-pane", "--workspace", WS, "--pane", PANE_TR, "-D", "--amount", "200"]);
 
+    const RC_CMD = `cd '${WT}' && claude remote-control --name "agent-${N}" --permission-mode bypassPermissions`;
+
     // `cmux send` defaults --workspace to $CMUX_WORKSPACE_ID (Claude's).
     // Without the explicit --workspace it can't find surfaces we just created
     // in $WS and errors with "Surface is not a terminal".
@@ -525,8 +529,9 @@ export async function wtCommand(argv: string[]): Promise<number> {
     await cmuxCall(["send", "--workspace", WS, "--surface", S2, MKT_CMD + "\n"]);
     await cmuxCall(["send", "--workspace", WS, "--surface", S3, API_CMD + "\n"]);
     await cmuxCall(["send", "--workspace", WS, "--surface", S4, NG_CMD + "\n"]);
+    await cmuxCall(["send", "--workspace", WS, "--surface", S5, RC_CMD + "\n"]);
 
-    writeWorktreeContext({ name: NAME, task: args.task, wt: WT, n: N, devEmail: DEV_EMAIL, devPassword: DEV_TEST_PASSWORD, app: APP, mkt: MKT, api: API, appDomain: APP_DOMAIN, mktDomain: MKT_DOMAIN, apiDomain: API_DOMAIN, ws: WS, browser: BROWSER, s1: S1, s2: S2, s3: S3, s4: S4 });
+    writeWorktreeContext({ name: NAME, task: args.task, wt: WT, n: N, devEmail: DEV_EMAIL, devPassword: DEV_TEST_PASSWORD, app: APP, mkt: MKT, api: API, appDomain: APP_DOMAIN, mktDomain: MKT_DOMAIN, apiDomain: API_DOMAIN, ws: WS, browser: BROWSER, s1: S1, s2: S2, s3: S3, s4: S4, s5: S5 });
 
     // Auto-spawn claude in the left pane and send an initial prompt so it
     // immediately reads CLAUDE.md and orients itself without the user having to ask.
@@ -539,8 +544,11 @@ export async function wtCommand(argv: string[]): Promise<number> {
         // Wait for Claude to fully render its input prompt, then send the
         // orientation message and a separate \n so Enter actually submits.
         const taskLine = args.task ? `\n\nYour task: ${args.task}` : "";
+        const endToEnd = args.task
+          ? `\n\nAfter completing the task: (1) run /demo to record and post an animated demo to the PR, then (2) run \`ae pr\` in bash to create the PR (it will auto-watch for review comments and fix them). Complete all three steps end-to-end without stopping.`
+          : "";
         await Bun.sleep(8000);
-        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `Read CLAUDE.md — it has your full environment context (ports, ngrok URLs, browser surface, axiom queries scoped to your test user). Tell me what branch we're on and what's already committed.${taskLine}`]);
+        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `Read CLAUDE.md — it has your full environment context (ports, ngrok URLs, browser surface, axiom queries scoped to your test user). Tell me what branch we're on and what's already committed.${taskLine}${endToEnd}`]);
         await Bun.sleep(500);
         await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `\n`]);
       }
@@ -548,7 +556,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
 
     _WS = WS;
     _BROWSER = BROWSER;
-    exec = `cmux ws=${WS} browser=${BROWSER} app=${S1} mkt=${S2} api=${S3} ngrok=${S4}`;
+    exec = `cmux ws=${WS} browser=${BROWSER} app=${S1} mkt=${S2} api=${S3} ngrok=${S4} rc=${S5}`;
   } else {
     const LOG = `/tmp/wt-${NAME}`;
     mkdirSync(LOG, { recursive: true });
@@ -571,6 +579,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
   console.log(`app:       http://localhost:${APP}   →  https://${APP_DOMAIN}`);
   console.log(`marketing: http://localhost:${MKT}   →  https://${MKT_DOMAIN}`);
   console.log(`api:       http://localhost:${API}   →  https://${API_DOMAIN}`);
+  console.log(`remote:    claude.ai/code  →  session: agent-${N}`);
   console.log(`exec:      ${exec}`);
 
   // Touch to satisfy unused-import-if-any linters in strict mode.
