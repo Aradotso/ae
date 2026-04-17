@@ -177,7 +177,7 @@ When comments arrive, automatically runs \`ae prr\` to fix them.
     const prUrl = await gh("pr", "view", "--json", "url", "-q", ".url");
     if (prUrl.code === 0 && prUrl.out) {
       const browserSurface = process.env.CMUX_BROWSER_SURFACE || "surface:134";
-      const nav = Bun.spawn(["cmux", "browser", browserSurface, "goto", prUrl.out], { stdout: "pipe", stderr: "pipe" });
+      const nav = Bun.spawn(["cmux", "browser", browserSurface, "tab", "new", prUrl.out], { stdout: "pipe", stderr: "pipe" });
       await nav.exited;
       console.log(`Opened ${prUrl.out} in browser`);
     }
