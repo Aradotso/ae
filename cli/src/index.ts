@@ -9,6 +9,7 @@ import { statusCommand } from "./commands/status.ts";
 import { listCommand } from "./commands/list.ts";
 import { showCommand } from "./commands/show.ts";
 import { updateCommand, maybeKickBackgroundCheck, maybeAutoUpdate, updateBanner } from "./commands/update.ts";
+import { urlCommand } from "./commands/url.ts";
 import { listSkills } from "./skills.ts";
 import { SHIMS, shimPath } from "./shims.ts";
 
@@ -103,6 +104,11 @@ const coreCommands: NativeCommand[] = [
       }
       return showCommand(id, { json: argv.includes("--json") });
     },
+  },
+  {
+    name: "url",
+    summary: "Print ngrok URLs for current worktree as clickable hyperlinks",
+    run: urlCommand,
   },
   {
     name: "update",
