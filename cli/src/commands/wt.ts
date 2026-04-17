@@ -520,7 +520,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
     await cmuxCall(["resize-pane", "--workspace", WS, "--pane", PANE_TR, "-L", "--amount", "240"]);
     await cmuxCall(["resize-pane", "--workspace", WS, "--pane", PANE_TR, "-D", "--amount", "200"]);
 
-    const RC_CMD = `cd '${WT}' && claude remote-control --name "agent-${N}" --permission-mode bypassPermissions`;
+    const RC_CMD = `cd '${WT}' && claude remote-control --name "agent-${N}" --permission-mode bypassPermissions --spawn same-dir`;
 
     // `cmux send` defaults --workspace to $CMUX_WORKSPACE_ID (Claude's).
     // Without the explicit --workspace it can't find surfaces we just created
