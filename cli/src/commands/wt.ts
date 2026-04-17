@@ -28,19 +28,27 @@ const DEV_TEST_PASSWORD = "test-ara-dev-2026";
 
 type Args = {
   name: string;
+  task: string;
   noClaude: boolean;
   help: boolean;
 };
 
 function parseArgs(argv: string[]): Args {
-  const out: Args = { name: "", noClaude: false, help: false };
+  const out: Args = { name: "", task: "", noClaude: false, help: false };
   const positional: string[] = [];
   for (const a of argv) {
     if (a === "--no-claude") out.noClaude = true;
     else if (a === "-h" || a === "--help") out.help = true;
     else positional.push(a);
   }
-  out.name = positional[0] ?? `wt-${Math.floor(Date.now() / 1000)}`;
+  // All positional words joined = task description.
+  // Branch name = slugified task, or epoch if none given.
+  if (positional.length > 0) {
+    out.task = positional.join(" ");
+    out.name = out.task.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
+  } else {
+    out.name = `wt-${Math.floor(Date.now() / 1000)}`;
+  }
   return out;
 }
 
@@ -459,7 +467,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
     await cmuxCall(["send", "--workspace", WS, "--surface", S3, API_CMD + "\n"]);
     await cmuxCall(["send", "--workspace", WS, "--surface", S4, NG_CMD + "\n"]);
 
-    writeWorktreeContext({ name: NAME, wt: WT, n: N, devEmail: DEV_EMAIL, devPassword: DEV_TEST_PASSWORD, app: APP, mkt: MKT, api: API, appDomain: APP_DOMAIN, mktDomain: MKT_DOMAIN, apiDomain: API_DOMAIN, ws: WS, browser: BROWSER, s1: S1, s2: S2, s3: S3, s4: S4 });
+    writeWorktreeContext({ name: NAME, task: args.task, wt: WT, n: N, devEmail: DEV_EMAIL, devPassword: DEV_TEST_PASSWORD, app: APP, mkt: MKT, api: API, appDomain: APP_DOMAIN, mktDomain: MKT_DOMAIN, apiDomain: API_DOMAIN, ws: WS, browser: BROWSER, s1: S1, s2: S2, s3: S3, s4: S4 });
 
     // Auto-spawn claude in the left pane and send an initial prompt so it
     // immediately reads CLAUDE.md and orients itself without the user having to ask.
@@ -471,8 +479,9 @@ export async function wtCommand(argv: string[]): Promise<number> {
         await cmuxCall(["focus-panel", "--panel", leftSurface]);
         // Wait for Claude to fully render its input prompt, then send the
         // orientation message and a separate \n so Enter actually submits.
+        const taskLine = args.task ? `\n\nYour task: ${args.task}` : "";
         await Bun.sleep(8000);
-        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `Read CLAUDE.md — it has your full environment context (ports, ngrok URLs, browser surface, axiom queries scoped to your test user). Then tell me what branch we're on and what's already been committed, so we know where to start.`]);
+        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `Read CLAUDE.md — it has your full environment context (ports, ngrok URLs, browser surface, axiom queries scoped to your test user). Tell me what branch we're on and what's already committed.${taskLine}`]);
         await Bun.sleep(500);
         await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `\n`]);
       }

@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 
 export type WorktreeContext = {
   name: string;
+  task: string;
   wt: string;
   n: number;
   devEmail: string;
@@ -31,13 +32,13 @@ export function writeWorktreeContext(ctx: WorktreeContext): void {
 
 You are an AI agent running inside worktree \`${ctx.wt}\` on branch \`wt/${ctx.name}\`.
 This file is your source of truth for the environment around you.
-
+${ctx.task ? `\n## Task\n\n${ctx.task}\n` : ""}
 ## Getting started
 
 1. You are already in the correct directory — this worktree is your workspace
 2. Run \`/ready\` to verify all CLIs and MCPs are connected
 3. Check \`git log origin/main..HEAD\` to see what's on this branch
-4. If you have a task, start it — otherwise ask the user what to build
+4. ${ctx.task ? `Implement the task above` : "Ask the user what to build"}
 
 ## Identity
 
