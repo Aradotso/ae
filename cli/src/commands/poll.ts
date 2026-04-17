@@ -144,23 +144,16 @@ function saveCmuxSession(ws: string, surface: string): void {
   writeFileSync(SESSION_FILE, `${ws} ${surface}\n`);
 }
 
+const TRIGGER_DIR = resolve(homedir(), ".ae-poll-triggers");
+
 function spawnWt(title: string): void {
-  const safe = title.replace(/'/g, "'\\''").replace(/"/g, '\\"');
-  const ae = Bun.which("ae") ?? `${homedir()}/.bun/bin/ae`;
-  const session = loadCmuxSession();
-
-  if (session) {
-    // cmux send works from background processes — inject ae wt into an existing shell
-    const cmd = `ae wt '${safe}'\n`;
-    const r = Bun.spawnSync([CMUX_BIN, "send", "--workspace", session.ws, "--surface", session.surface, cmd],
-      { stdout: "pipe", stderr: "pipe" });
-    if (r.exitCode === 0) { console.log(`[poll] ✓ ae wt injected to cmux surface ${session.surface}`); return; }
-    console.warn(`[poll] cmux send failed (${r.exitCode}): ${r.stderr.toString().trim()}`);
-  }
-
-  // Fallback: background bash (services only, no cmux layout)
-  const cmd = `cd '${ARA_REPO}'; ${ae} wt '${safe}' >> /tmp/ae-wt-spawn.log 2>&1`;
-  Bun.spawnSync(["bash", "-c", `${cmd} &`]);
+  // Write a trigger file — the watcher loop running inside the cmux spawn shell
+  // picks it up and runs ae wt from within cmux (full socket access).
+  mkdirSync(TRIGGER_DIR, { recursive: true });
+  const safe = title.replace(/'/g, "'\\''");
+  const id = Date.now();
+  writeFileSync(resolve(TRIGGER_DIR, `${id}.sh`), `ae wt '${safe}'\n`, { mode: 0o755 });
+  console.log(`[poll] ✓ trigger written for: ${title}`);
 }
 
 // ─── core poll ────────────────────────────────────────────────────────────────
@@ -335,7 +328,11 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
       if (r.exitCode === 0) { try { spawnSurface = JSON.parse(r.stdout.toString()).surface_ref ?? ""; } catch {} }
     }
     if (spawnSurface) {
-      Bun.spawnSync([CMUX_BIN, "send", "--workspace", ws, "--surface", spawnSurface, "\n"]);
+      // Start a watcher loop in the spawn shell — polls ~/.ae-poll-triggers/ and
+      // runs any .sh files it finds. Runs inside cmux so ae wt has full socket access.
+      mkdirSync(TRIGGER_DIR, { recursive: true });
+      const watcherCmd = `while :; do for f in '${TRIGGER_DIR}'/*.sh; do [ -f "$f" ] && bash "$f" && rm -f "$f"; done; sleep 1; done\n`;
+      Bun.spawnSync([CMUX_BIN, "send", "--workspace", ws, "--surface", spawnSurface, watcherCmd]);
       saveCmuxSession(ws, spawnSurface);
     } else {
       saveCmuxSession(ws, process.env.CMUX_SURFACE_ID ?? "");
