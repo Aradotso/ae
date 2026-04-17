@@ -12,8 +12,7 @@ const STATE_IN_REVIEW = "ef4c2075-b93d-4a8a-87c2-0b2d632481a7";
 const STATE_DONE = "2d48ea35-d79a-47fb-a3f1-c94fb29e2592";
 
 const STATE_FILE = resolve(homedir(), ".ae-poll-state.json");
-const PLIST_PATH = resolve(homedir(), "Library/LaunchAgents/so.ara.ae-poll.plist");
-const PLIST_LABEL = "so.ara.ae-poll";
+const PLIST_PATH = resolve(homedir(), "Library/LaunchAgents/so.ara.ae-poll.plist"); // kept for --uninstall cleanup
 const ARA_REPO = resolve(homedir(), "github/Ara");
 
 // ─── state ────────────────────────────────────────────────────────────────────
@@ -106,10 +105,11 @@ const SPAWN_PATH = [
 ].join(":");
 
 function spawnWt(title: string): void {
-  // Use bash -c '... &' to fully detach ae wt from the poll daemon's event loop.
+  // The poll loop runs inside cmux, so ae wt has full socket access.
+  // Spawn in background so we don't block the poll loop.
   const safe = title.replace(/'/g, "'\\''");
   const ae = Bun.which("ae") ?? `${homedir()}/.bun/bin/ae`;
-  const cmd = `export PATH='${SPAWN_PATH}' HOME='${homedir()}' CMUX_WORKSPACE_ID=poll; cd '${ARA_REPO}'; ${ae} wt '${safe}' >> /tmp/ae-wt-spawn.log 2>&1`;
+  const cmd = `cd '${ARA_REPO}'; ${ae} wt '${safe}' >> /tmp/ae-wt-spawn.log 2>&1`;
   Bun.spawnSync(["bash", "-c", `${cmd} &`]);
 }
 
@@ -180,34 +180,35 @@ async function getApiKeyFromRailway(): Promise<string | null> {
   } catch { return null; }
 }
 
-function writePlist(apiKey: string): void {
-  const aePath = Bun.which("ae") ?? "/usr/local/bin/ae";
-  mkdirSync(dirname(PLIST_PATH), { recursive: true });
-  writeFileSync(PLIST_PATH, `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${PLIST_LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/bin/caffeinate</string>
-    <string>-i</string>
-    <string>${aePath}</string>
-    <string>poll</string>
-    <string>--loop</string>
-  </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>LINEAR_API_KEY</key><string>${apiKey}</string>
-    <key>HOME</key><string>${homedir()}</string>
-    <key>PATH</key><string>${homedir()}/.bun/bin:${homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>${homedir()}/.ae-poll.log</string>
-  <key>StandardErrorPath</key><string>${homedir()}/.ae-poll.log</string>
-</dict>
-</plist>`);
+async function installInCmux(apiKey: string): Promise<void> {
+  // Run the poll loop inside a dedicated cmux workspace so it has native
+  // socket access (cmux rejects connections from external/launchd processes).
+  const ae = Bun.which("ae") ?? `${homedir()}/.bun/bin/ae`;
+
+  const runCapture = async (args: string[]) => {
+    const r = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" });
+    return { code: r.exitCode, out: r.stdout.toString().trim() };
+  };
+
+  // Create a dedicated cmux workspace for the poll daemon
+  const wsRaw = (await runCapture(["cmux", "new-workspace", "--name", "ae-poll"])).out;
+  const wsMatch = wsRaw.match(/workspace:\S+/);
+  if (!wsMatch) throw new Error(`cmux new-workspace failed: ${wsRaw}`);
+  const WS = wsMatch[0];
+
+  // Get the default pane/surface
+  const panesRaw = (await runCapture(["cmux", "--json", "list-panes", "--workspace", WS])).out;
+  const panes = JSON.parse(panesRaw);
+  const surface = panes.panes[0]?.surface_refs?.[0] ?? panes.panes[0]?.ref;
+  if (!surface) throw new Error("Could not find surface in new workspace");
+
+  // Send the poll loop command (caffeinate keeps Mac awake)
+  const cmd = `LINEAR_API_KEY='${apiKey}' caffeinate -i ${ae} poll --loop\n`;
+  Bun.spawnSync(["cmux", "send", "--workspace", WS, "--surface", surface, cmd]);
+
+  console.log(`✓ ae poll running in cmux workspace: ${WS}`);
+  console.log(`  Logs:  tail -f ~/.ae-poll.log`);
+  console.log(`  State: ae poll --status`);
 }
 
 // ─── command ──────────────────────────────────────────────────────────────────
@@ -218,18 +219,18 @@ export async function pollCommand(argv: string[]): Promise<number> {
 
 Usage:
   ae poll                run once and exit
-  ae poll --loop         run every 60s (used by daemon)
-  ae poll --install      fetch LINEAR_API_KEY from Railway, install + start launchd agent
-  ae poll --uninstall    stop and remove launchd agent
+  ae poll --loop         run every 5s (used by the installed cmux pane)
+  ae poll --install      create a cmux workspace pane running the poll loop + caffeinate
+  ae poll --uninstall    kill the running poll loop
   ae poll --status       show currently tracked issues
 
 Flow:
-  In Progress  →  ae wt <title>  (spawns Terminal window with full env)
+  In Progress  →  ae wt <title>  (creates cmux workspace)
   PR opened    →  Linear: In Review
   PR merged    →  Linear: Done
 
-Logs (when daemon): ~/.ae-poll.log
-State file:         ~/.ae-poll-state.json
+Must run --install from inside a cmux terminal.
+Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
 `);
     return 0;
   }
@@ -248,13 +249,21 @@ State file:         ~/.ae-poll-state.json
   }
 
   if (argv.includes("--uninstall")) {
-    Bun.spawnSync(["launchctl", "unload", PLIST_PATH], { stdio: ["inherit", "inherit", "inherit"] });
+    // Kill any running poll loop
+    Bun.spawnSync(["pkill", "-f", "ae poll --loop"], { stdout: "pipe", stderr: "pipe" });
+    // Also unload launchd if still present from old install
+    Bun.spawnSync(["launchctl", "unload", PLIST_PATH], { stdout: "pipe", stderr: "pipe" });
     if (existsSync(PLIST_PATH)) Bun.spawnSync(["rm", PLIST_PATH]);
-    console.log("ae poll uninstalled.");
+    console.log("ae poll stopped.");
     return 0;
   }
 
   if (argv.includes("--install")) {
+    if (!process.env.CMUX_WORKSPACE_ID) {
+      console.error("ae poll --install must be run from inside a cmux terminal (CMUX_WORKSPACE_ID not set).");
+      console.error("Open cmux, start a terminal, and run this command there.");
+      return 1;
+    }
     let apiKey = process.env.LINEAR_API_KEY ?? null;
     if (!apiKey) {
       console.log("Fetching LINEAR_API_KEY from Railway (ara-api)...");
@@ -264,14 +273,9 @@ State file:         ~/.ae-poll-state.json
       console.error("Could not find LINEAR_API_KEY. Set it in your env or ensure `railway` is linked.");
       return 1;
     }
-    writePlist(apiKey);
-    // Unload first (idempotent) then load
-    Bun.spawnSync(["launchctl", "unload", PLIST_PATH], { stdout: "pipe", stderr: "pipe" });
-    const load = Bun.spawnSync(["launchctl", "load", "-w", PLIST_PATH], { stdio: ["inherit", "inherit", "inherit"] });
-    if (load.exitCode !== 0) { console.error("launchctl load failed"); return 1; }
-    console.log(`✓ ae poll installed and running (with caffeinate -i)`);
-    console.log(`  Logs:  tail -f ~/.ae-poll.log`);
-    console.log(`  State: ae poll --status`);
+    // Kill any previous poll loop
+    Bun.spawnSync(["pkill", "-f", "ae poll --loop"], { stdout: "pipe", stderr: "pipe" });
+    await installInCmux(apiKey);
     return 0;
   }
 
