@@ -3,13 +3,14 @@ import { wtCommand } from "./commands/wt.ts";
 import { prCommand } from "./commands/pr.ts";
 import { prrCommand } from "./commands/prr.ts";
 import { sessionsCommand } from "./commands/sessions.ts";
+import { statusCommand } from "./commands/status.ts";
 import { listCommand } from "./commands/list.ts";
 import { showCommand } from "./commands/show.ts";
 import { updateCommand, maybeKickBackgroundCheck, maybeAutoUpdate, updateBanner } from "./commands/update.ts";
 import { listSkills } from "./skills.ts";
 import { SHIMS, shimPath } from "./shims.ts";
 
-const VERSION = "0.2.1";
+const VERSION = "0.2.2";
 
 type NativeCommand = {
   name: string;
@@ -38,6 +39,11 @@ const coreCommands: NativeCommand[] = [
     name: "wt",
     summary: "Spawn an Ara worktree + dev env + cmux layout (+ claude in left pane)",
     run: wtCommand,
+  },
+  {
+    name: "status",
+    summary: "Dashboard: all agents, ports, URLs, PR state; auto-gc merged worktrees",
+    run: statusCommand,
   },
   {
     name: "pr",
