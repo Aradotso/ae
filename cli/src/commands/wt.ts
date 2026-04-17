@@ -265,14 +265,18 @@ export async function wtCommand(argv: string[]): Promise<number> {
     } catch {}
   }
 
-  // Symlink gitignored .env.local from main tree (carries shared secrets + dev password)
-  for (const d of ["app.ara.so", "ara.so", "Ara-backend", "Ara-backend/api"]) {
-    const src = resolve(REPO, d, ".env.local");
-    const dst = resolve(WT, d, ".env.local");
+  // Symlink gitignored files from main tree into the worktree.
+  // .env.local carries shared secrets; .venv avoids re-installing Python deps per worktree.
+  const symlinks: { src: string; dst: string }[] = [
+    ...["app.ara.so", "ara.so", "Ara-backend", "Ara-backend/api"].map((d) => ({
+      src: resolve(REPO, d, ".env.local"),
+      dst: resolve(WT, d, ".env.local"),
+    })),
+    { src: resolve(REPO, "Ara-backend/api/.venv"), dst: resolve(WT, "Ara-backend/api/.venv") },
+  ];
+  for (const { src, dst } of symlinks) {
     if (existsSync(src)) {
-      try {
-        if (existsSync(dst)) unlinkSync(dst);
-      } catch {}
+      try { if (existsSync(dst)) unlinkSync(dst); } catch {}
       try {
         mkdirSync(dirname(dst), { recursive: true });
         symlinkSync(src, dst);
@@ -313,7 +317,7 @@ export async function wtCommand(argv: string[]): Promise<number> {
   // so set DEV overrides INSIDE the subshell it spawns — that wins over
   // Railway's. CLOUD_API_PUBLIC_URL pinpoints the Linq webhook to this
   // agent's ngrok tunnel (backend auto-registers on startup).
-  const API_CMD = `cd '${WT}/Ara-backend/api' && railway run bash -c "SUPABASE_URL='${DEV_SUPABASE_URL}' SUPABASE_ANON_KEY='${DEV_SUPABASE_ANON_KEY}' SUPABASE_SERVICE_ROLE_KEY='${DEV_SUPABASE_SERVICE_ROLE_KEY}' SUPABASE_JWT_ISSUER='${DEV_SUPABASE_URL}/auth/v1' CLOUD_API_PUBLIC_URL='https://${API_DOMAIN}' CORS_EXTRA_ORIGINS='https://${APP_DOMAIN},https://${MKT_DOMAIN}' ENVIRONMENT=local python3 -m uvicorn main:app --host 127.0.0.1 --port ${API}"`;
+  const API_CMD = `cd '${WT}/Ara-backend/api' && railway run bash -c "SUPABASE_URL='${DEV_SUPABASE_URL}' SUPABASE_ANON_KEY='${DEV_SUPABASE_ANON_KEY}' SUPABASE_SERVICE_ROLE_KEY='${DEV_SUPABASE_SERVICE_ROLE_KEY}' SUPABASE_JWT_ISSUER='${DEV_SUPABASE_URL}/auth/v1' CLOUD_API_PUBLIC_URL='https://${API_DOMAIN}' CORS_EXTRA_ORIGINS='https://${APP_DOMAIN},https://${MKT_DOMAIN}' ENVIRONMENT=local .venv/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port ${API}"`;
 
   // Ngrok: ONE agent per authtoken — multiple `ngrok start` calls kick each
   // other offline. Detect a running agent on 4040 and append tunnels via its
