@@ -104,11 +104,36 @@ const SPAWN_PATH = [
   "/Applications/cmux.app/Contents/Resources/bin",
 ].join(":");
 
+const SESSION_FILE = resolve(homedir(), ".ae-cmux-session");
+const CMUX_BIN = Bun.which("cmux") ?? "/Applications/cmux.app/Contents/Resources/bin/cmux";
+
+function loadCmuxSession(): { ws: string; surface: string } | null {
+  try {
+    const [ws, surface] = readFileSync(SESSION_FILE, "utf8").trim().split(" ");
+    return ws && surface ? { ws, surface } : null;
+  } catch { return null; }
+}
+
+function saveCmuxSession(ws: string, surface: string): void {
+  writeFileSync(SESSION_FILE, `${ws} ${surface}\n`);
+}
+
 function spawnWt(title: string): void {
-  // The poll loop runs inside cmux, so ae wt has full socket access.
-  // Spawn in background so we don't block the poll loop.
-  const safe = title.replace(/'/g, "'\\''");
+  const safe = title.replace(/'/g, "'\\''").replace(/"/g, '\\"');
   const ae = Bun.which("ae") ?? `${homedir()}/.bun/bin/ae`;
+  const session = loadCmuxSession();
+
+  if (session) {
+    // cmux send works from background processes — inject ae wt into an existing shell
+    // The target shell is inside cmux so it has full socket access
+    const cmd = `ae wt '${safe}'\n`;
+    const r = Bun.spawnSync([CMUX_BIN, "send", "--workspace", session.ws, "--surface", session.surface, cmd],
+      { stdout: "pipe", stderr: "pipe" });
+    if (r.exitCode === 0) { console.log(`[poll] sent to cmux surface ${session.surface}`); return; }
+    console.warn(`[poll] cmux send failed (${r.exitCode}): ${r.stderr.toString().trim()}`);
+  }
+
+  // Fallback: background bash (services only, no cmux layout)
   const cmd = `cd '${ARA_REPO}'; ${ae} wt '${safe}' >> /tmp/ae-wt-spawn.log 2>&1`;
   Bun.spawnSync(["bash", "-c", `${cmd} &`]);
 }
@@ -251,10 +276,18 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
       console.error("Could not find LINEAR_API_KEY. Set it in your env or ensure `railway` is linked.");
       return 1;
     }
-    // Kill any previous poll loop
+    // Save current cmux session so daemon can use cmux send to inject ae wt commands
+    const ws = process.env.CMUX_WORKSPACE_ID ?? "";
+    const surface = process.env.CMUX_SURFACE_ID ?? "";
+    if (ws && surface) {
+      saveCmuxSession(ws, surface);
+      console.log(`Saved cmux session: ${ws} / ${surface}`);
+    }
+    // Kill any previous poll loop and start fresh
     Bun.spawnSync(["pkill", "-f", "ae poll --loop"], { stdout: "pipe", stderr: "pipe" });
     installAsBackground(apiKey);
-    console.log(`✓ ae poll running in background (cmux socket inherited)`);
+    console.log(`✓ ae poll running in background`);
+    console.log(`  ae wt will be injected via cmux send to surface ${surface}`);
     console.log(`  Logs:  tail -f ~/.ae-poll.log`);
     console.log(`  State: ae poll --status`);
     return 0;
