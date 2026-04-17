@@ -273,6 +273,13 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
       console.error("Could not find LINEAR_API_KEY. Set it in your env or ensure `railway` is linked.");
       return 1;
     }
+    // Clear stale in-progress entries so fresh start doesn't retry old spawns
+    const stale = loadState();
+    const cleaned = Object.fromEntries(
+      Object.entries(stale.tracked).filter(([, v]) => v.linearState !== "in-progress")
+    );
+    saveState({ tracked: cleaned });
+
     const ws = process.env.CMUX_WORKSPACE_ID;
     let spawnSurface = "";
     let paneRef = "";
