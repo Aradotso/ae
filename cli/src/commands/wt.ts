@@ -469,9 +469,12 @@ export async function wtCommand(argv: string[]): Promise<number> {
       if (leftSurface) {
         await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `cd '${WT}' && claude --dangerously-skip-permissions\n`]);
         await cmuxCall(["focus-panel", "--panel", leftSurface]);
-        // Wait for Claude to start, then send the orientation prompt.
-        await Bun.sleep(4000);
-        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `Read CLAUDE.md — it has your full environment context (ports, ngrok URLs, browser surface, axiom queries scoped to your test user). Then tell me what branch we're on and what's already been committed, so we know where to start.\n`]);
+        // Wait for Claude to fully render its input prompt, then send the
+        // orientation message and a separate \n so Enter actually submits.
+        await Bun.sleep(8000);
+        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `Read CLAUDE.md — it has your full environment context (ports, ngrok URLs, browser surface, axiom queries scoped to your test user). Then tell me what branch we're on and what's already been committed, so we know where to start.`]);
+        await Bun.sleep(500);
+        await cmuxCall(["send", "--workspace", WS, "--surface", leftSurface, `\n`]);
       }
     }
 
@@ -490,8 +493,8 @@ export async function wtCommand(argv: string[]): Promise<number> {
   if (ngNeedsReady) await waitForNgrokReady(30);
 
   // Reload browser now that ngrok tunnels are up and services are starting.
-  if (_WS && _BROWSER) {
-    await cmuxCall(["navigate", "--workspace", _WS, "--surface", _BROWSER, "--url", `https://${APP_DOMAIN}`]);
+  if (_BROWSER) {
+    await cmuxCall(["browser", _BROWSER, "goto", `https://${APP_DOMAIN}`]);
   }
 
   console.log(`worktree:  ${WT}`);
