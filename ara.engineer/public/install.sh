@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-REPO_URL="${AE_REPO_URL:-https://github.com/Aradotso/ara.engineer.git}"
+REPO_URL="${AE_REPO_URL:-https://github.com/Aradotso/ae.git}"
 INSTALL_DIR="${AE_INSTALL_DIR:-$HOME/.ae}"
 BIN_DIR="${AE_BIN_DIR:-$HOME/.bun/bin}"
 
@@ -54,6 +54,20 @@ if [ -d "$INSTALL_DIR/cli/shims" ]; then
   done
 fi
 say "Linked into $BIN_DIR: $linked"
+
+# ── symlink bundled skills into ~/.claude/skills/ ───────────────────────────
+# This makes every ae skill available as a /skillname slash command in Claude Code.
+SKILLS_SRC="$INSTALL_DIR/cli/skills"
+CLAUDE_SKILLS="$HOME/.claude/skills"
+if [ -d "$SKILLS_SRC" ]; then
+  mkdir -p "$CLAUDE_SKILLS"
+  for skill_dir in "$SKILLS_SRC"/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name=$(basename "$skill_dir")
+    ln -snf "$skill_dir" "$CLAUDE_SKILLS/$skill_name"
+  done
+  say "Skills linked into $CLAUDE_SKILLS"
+fi
 
 # ── warn if not on PATH ─────────────────────────────────────────────────────
 case ":$PATH:" in

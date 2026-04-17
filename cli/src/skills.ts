@@ -36,6 +36,7 @@ export function candidateRoots(): string[] {
   if (fromEnv) {
     for (const p of fromEnv.split(":").filter(Boolean)) roots.push(p);
   }
+  roots.push(resolve(cliDir(), "skills")); // bundled skills (highest priority after env override)
   roots.push(resolve(homedir(), ".claude/skills"));
   roots.push(resolve(homedir(), "lab/astack"));
   roots.push(resolve(homedir(), "lab/ae"));

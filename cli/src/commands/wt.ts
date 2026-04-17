@@ -254,6 +254,17 @@ export async function wtCommand(argv: string[]): Promise<number> {
     // non-fatal — user will see "No linked project" and can railway link manually
   }
 
+  // Symlink bundled skills into the worktree so Claude Code discovers them as slash commands.
+  const skillsSrc = resolve(import.meta.dir, "../../skills");
+  const skillsDst = resolve(WT, ".claude/skills");
+  if (existsSync(skillsSrc)) {
+    try {
+      mkdirSync(resolve(WT, ".claude"), { recursive: true });
+      if (existsSync(skillsDst)) unlinkSync(skillsDst);
+      symlinkSync(skillsSrc, skillsDst);
+    } catch {}
+  }
+
   // Symlink gitignored .env.local from main tree (carries shared secrets + dev password)
   for (const d of ["app.ara.so", "ara.so", "Ara-backend", "Ara-backend/api"]) {
     const src = resolve(REPO, d, ".env.local");
