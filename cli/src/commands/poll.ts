@@ -238,15 +238,12 @@ async function getApiKeyFromRailway(): Promise<string | null> {
 }
 
 function installAsBackground(apiKey: string): void {
-  // Run without nohup — cmux checks process credentials and rejects nohup-detached processes.
-  // Running as a direct background job keeps us in the cmux process hierarchy.
-  // We use disown to detach from the shell's job table without losing cmux credentials.
+  // Run poll loop directly as a background job — no caffeinate wrapper.
+  // caffeinate as a parent breaks cmux socket credentials; run it standalone instead.
+  // caffeinate -si (no command) prevents sleep until killed alongside the poll loop.
   const ae = Bun.which("ae") ?? `${homedir()}/.bun/bin/ae`;
-  // caffeinate -si: -s prevents system sleep (AC only), -i prevents idle sleep
-  const cmd = `caffeinate -si '${ae}' poll --loop >> ~/.ae-poll.log 2>&1 & disown\necho "ae-poll PID: $!"`;
-  // (replace LINEAR_API_KEY inline so it's visible to the process)
-  const finalCmd = cmd.replace("caffeinate", `LINEAR_API_KEY='${apiKey}' caffeinate`);
-  Bun.spawnSync(["bash", "-c", finalCmd], { stdio: ["inherit", "inherit", "inherit"] });
+  const cmd = `LINEAR_API_KEY='${apiKey}' '${ae}' poll --loop >> ~/.ae-poll.log 2>&1 &\ncaffeinate -si &\necho "ae-poll PID: $!"`;
+  Bun.spawnSync(["bash", "-c", cmd], { stdio: ["inherit", "inherit", "inherit"] });
 }
 
 // ─── command ──────────────────────────────────────────────────────────────────
@@ -297,6 +294,7 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
 
   if (argv[0] === "kill" || argv.includes("--stop") || argv.includes("--uninstall")) {
     Bun.spawnSync(["pkill", "-9", "-f", "index.ts poll --loop"], { stdout: "pipe", stderr: "pipe" });
+    Bun.spawnSync(["pkill", "-9", "caffeinate"], { stdout: "pipe", stderr: "pipe" });
     Bun.spawnSync(["launchctl", "unload", PLIST_PATH], { stdout: "pipe", stderr: "pipe" });
     if (existsSync(PLIST_PATH)) Bun.spawnSync(["rm", PLIST_PATH]);
     console.log("ae poll stopped.");
