@@ -180,39 +180,13 @@ async function getApiKeyFromRailway(): Promise<string | null> {
   } catch { return null; }
 }
 
-async function installInCmux(apiKey: string): Promise<void> {
-  // Run the poll loop inside a dedicated cmux workspace so it has native
-  // socket access (cmux rejects connections from external/launchd processes).
+function installAsBackground(apiKey: string): void {
+  // Run ae poll --loop as a background process in the current shell.
+  // Since this runs inside a cmux terminal, it inherits full cmux socket access
+  // so ae wt can create proper cmux workspaces.
   const ae = Bun.which("ae") ?? `${homedir()}/.bun/bin/ae`;
-
-  const runCapture = async (args: string[]) => {
-    const r = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" });
-    return { code: r.exitCode, out: r.stdout.toString().trim() };
-  };
-
-  // Create a dedicated cmux workspace for the poll daemon
-  const wsRaw = (await runCapture(["cmux", "new-workspace", "--name", "ae-poll"])).out;
-  const wsMatch = wsRaw.match(/workspace:\S+/);
-  if (!wsMatch) throw new Error(`cmux new-workspace failed: ${wsRaw}`);
-  const WS = wsMatch[0];
-
-  // Get the default pane, then explicitly create a persistent terminal surface
-  const panesRaw = (await runCapture(["cmux", "--json", "list-panes", "--workspace", WS])).out;
-  const panes = JSON.parse(panesRaw);
-  const paneRef = panes.panes[0]?.ref;
-  if (!paneRef) throw new Error("Could not find pane in new workspace");
-
-  const surfRaw = (await runCapture(["cmux", "--json", "new-surface", "--type", "terminal", "--pane", paneRef, "--workspace", WS])).out;
-  const surface = JSON.parse(surfRaw).surface_ref;
-  if (!surface) throw new Error("Could not create terminal surface");
-
-  // Send the poll loop command
-  const cmd = `LINEAR_API_KEY='${apiKey}' ${ae} poll --loop\n`;
-  Bun.spawnSync(["cmux", "send", "--workspace", WS, "--surface", surface, cmd]);
-
-  console.log(`✓ ae poll running in cmux workspace: ${WS}`);
-  console.log(`  Logs:  tail -f ~/.ae-poll.log`);
-  console.log(`  State: ae poll --status`);
+  const cmd = `nohup env LINEAR_API_KEY='${apiKey}' '${ae}' poll --loop >> ~/.ae-poll.log 2>&1 &\necho "ae-poll PID: $!"`;
+  Bun.spawnSync(["bash", "-c", cmd], { stdio: ["inherit", "inherit", "inherit"] });
 }
 
 // ─── command ──────────────────────────────────────────────────────────────────
@@ -279,7 +253,10 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
     }
     // Kill any previous poll loop
     Bun.spawnSync(["pkill", "-f", "ae poll --loop"], { stdout: "pipe", stderr: "pipe" });
-    await installInCmux(apiKey);
+    installAsBackground(apiKey);
+    console.log(`✓ ae poll running in background (cmux socket inherited)`);
+    console.log(`  Logs:  tail -f ~/.ae-poll.log`);
+    console.log(`  State: ae poll --status`);
     return 0;
   }
 
