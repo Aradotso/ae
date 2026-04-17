@@ -218,15 +218,22 @@ async function pollOnce(apiKey: string, userId: string): Promise<void> {
 
 // ─── install ──────────────────────────────────────────────────────────────────
 
+const LOCAL_KEY_FILE = resolve(homedir(), ".ae-linear-key");
+
+function getLocalApiKey(): string | null {
+  // Priority: env var → ~/.ae-linear-key → (Railway fallback, may not be yours)
+  if (process.env.LINEAR_API_KEY) return process.env.LINEAR_API_KEY;
+  if (existsSync(LOCAL_KEY_FILE)) return readFileSync(LOCAL_KEY_FILE, "utf8").trim() || null;
+  return null;
+}
+
 async function getApiKeyFromRailway(): Promise<string | null> {
   try {
-    // `railway run` injects Railway env vars — grab LINEAR_API_KEY from ara-api
     const r = Bun.spawnSync(
       ["railway", "run", "--service", "ara-api", "--environment", "prd", "--", "bash", "-c", "printf '%s' \"$LINEAR_API_KEY\""],
       { stdout: "pipe", stderr: "pipe", cwd: ARA_REPO },
     );
-    const val = r.stdout.toString().trim();
-    return val || null;
+    return r.stdout.toString().trim() || null;
   } catch { return null; }
 }
 
@@ -249,6 +256,7 @@ export async function pollCommand(argv: string[]): Promise<number> {
     console.log(`ae poll — Linear → ae wt → PR lifecycle automation
 
 Usage:
+  ae poll setup          save your personal Linear API key (~/.ae-linear-key)
   ae poll                start the daemon (run from a cmux terminal, then leave)
   ae poll status         show currently tracked issues
   ae poll kill           kill the running daemon
@@ -260,6 +268,17 @@ Flow:
 
 Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
 `);
+    return 0;
+  }
+
+  if (argv[0] === "setup") {
+    const { createInterface } = await import("node:readline");
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const key = await new Promise<string>(r => rl.question("Paste your Linear personal API key: ", r));
+    rl.close();
+    if (!key.startsWith("lin_api_")) { console.error("Invalid key — must start with lin_api_"); return 1; }
+    writeFileSync(LOCAL_KEY_FILE, key.trim() + "\n", { mode: 0o600 });
+    console.log(`✓ Saved to ~/.ae-linear-key`);
     return 0;
   }
 
@@ -290,13 +309,13 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
       console.error("ae poll must be run from inside a cmux terminal.");
       return 1;
     }
-    let apiKey = process.env.LINEAR_API_KEY ?? null;
+    let apiKey = getLocalApiKey();
     if (!apiKey) {
-      console.log("Fetching LINEAR_API_KEY from Railway (ara-api)...");
+      console.log("No personal key found — fetching from Railway (run `ae poll setup` to set your own)...");
       apiKey = await getApiKeyFromRailway();
     }
     if (!apiKey) {
-      console.error("Could not find LINEAR_API_KEY. Set it in your env or ensure `railway` is linked.");
+      console.error("No LINEAR_API_KEY found. Run `ae poll setup` to save your personal key.");
       return 1;
     }
     // Clear stale in-progress entries so fresh start doesn't retry old spawns
@@ -330,9 +349,9 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
     return 0;
   }
 
-  const apiKey = process.env.LINEAR_API_KEY;
+  const apiKey = getLocalApiKey();
   if (!apiKey) {
-    console.error("LINEAR_API_KEY not set.");
+    console.error("LINEAR_API_KEY not set. Run `ae poll setup` to save your personal Linear API key.");
     return 1;
   }
 
