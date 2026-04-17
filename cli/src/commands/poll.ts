@@ -202,8 +202,8 @@ async function installInCmux(apiKey: string): Promise<void> {
   const surface = panes.panes[0]?.surface_refs?.[0] ?? panes.panes[0]?.ref;
   if (!surface) throw new Error("Could not find surface in new workspace");
 
-  // Send the poll loop command (caffeinate keeps Mac awake)
-  const cmd = `LINEAR_API_KEY='${apiKey}' caffeinate -i ${ae} poll --loop\n`;
+  // Send the poll loop command
+  const cmd = `LINEAR_API_KEY='${apiKey}' ${ae} poll --loop\n`;
   Bun.spawnSync(["cmux", "send", "--workspace", WS, "--surface", surface, cmd]);
 
   console.log(`✓ ae poll running in cmux workspace: ${WS}`);
