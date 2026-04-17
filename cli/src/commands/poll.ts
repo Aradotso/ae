@@ -276,12 +276,31 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
       console.error("Could not find LINEAR_API_KEY. Set it in your env or ensure `railway` is linked.");
       return 1;
     }
-    // Save current cmux session so daemon can use cmux send to inject ae wt commands
+    // Create a dedicated spawn-shell terminal surface in the current cmux workspace.
+    // ae wt injected into a real shell (not the Claude surface) has full cmux privileges.
     const ws = process.env.CMUX_WORKSPACE_ID ?? "";
-    const surface = process.env.CMUX_SURFACE_ID ?? "";
-    if (ws && surface) {
-      saveCmuxSession(ws, surface);
-      console.log(`Saved cmux session: ${ws} / ${surface}`);
+    const panelId = process.env.CMUX_PANEL_ID ?? process.env.CMUX_SURFACE_ID ?? "";
+    let spawnSurface = "";
+    if (ws && panelId) {
+      // Try to create a new terminal surface in the current workspace
+      const r = Bun.spawnSync(
+        [CMUX_BIN, "--json", "new-surface", "--type", "terminal", "--pane", panelId, "--workspace", ws],
+        { stdout: "pipe", stderr: "pipe" },
+      );
+      if (r.exitCode === 0) {
+        try { spawnSurface = JSON.parse(r.stdout.toString()).surface_ref ?? ""; } catch {}
+      }
+      if (spawnSurface) {
+        // Send an initial newline so the shell is at a prompt
+        Bun.spawnSync([CMUX_BIN, "send", "--workspace", ws, "--surface", spawnSurface, "\n"]);
+        saveCmuxSession(ws, spawnSurface);
+        console.log(`Created spawn shell: ${spawnSurface} in workspace ${ws}`);
+      } else {
+        // Fallback: use the current surface
+        const surface = process.env.CMUX_SURFACE_ID ?? "";
+        saveCmuxSession(ws, surface);
+        console.log(`Saved cmux session (fallback): ${ws} / ${surface}`);
+      }
     }
     // Kill any previous poll loop and start fresh
     Bun.spawnSync(["pkill", "-f", "ae poll --loop"], { stdout: "pipe", stderr: "pipe" });
