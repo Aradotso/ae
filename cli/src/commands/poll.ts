@@ -252,9 +252,7 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
   }
 
   if (argv.includes("--uninstall")) {
-    // Kill any running poll loop
-    Bun.spawnSync(["pkill", "-f", "ae poll --loop"], { stdout: "pipe", stderr: "pipe" });
-    // Also unload launchd if still present from old install
+    Bun.spawnSync(["pkill", "-9", "-f", "index.ts poll --loop"], { stdout: "pipe", stderr: "pipe" });
     Bun.spawnSync(["launchctl", "unload", PLIST_PATH], { stdout: "pipe", stderr: "pipe" });
     if (existsSync(PLIST_PATH)) Bun.spawnSync(["rm", PLIST_PATH]);
     console.log("ae poll stopped.");
@@ -308,8 +306,8 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
         console.log(`Saved cmux session (fallback): ${ws} / ${surface}`);
       }
     }
-    // Kill any previous poll loop and start fresh
-    Bun.spawnSync(["pkill", "-f", "ae poll --loop"], { stdout: "pipe", stderr: "pipe" });
+    // Kill any previous poll loop (process is `bun .../index.ts poll --loop`)
+    Bun.spawnSync(["pkill", "-9", "-f", "index.ts poll --loop"], { stdout: "pipe", stderr: "pipe" });
     installAsBackground(apiKey);
     console.log(`✓ ae poll running in background`);
     console.log(`  ae wt will be injected via cmux send to surface ${spawnSurface || process.env.CMUX_SURFACE_ID}`);
