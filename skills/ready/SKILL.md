@@ -41,11 +41,12 @@ echo '=== AXIOM ===' && axiom version && axiom dataset info logs 2>&1 | head -5;
 echo '=== STRIPE ===' && stripe version && stripe customers list --limit 1 2>&1 | head -5;
 echo '=== VERCEL ===' && vercel --version && vercel whoami 2>&1;
 echo '=== LINEAR ===' && linear team list 2>&1 | head -5;
+echo '=== BLAXEL ===' && bl version 2>&1 && bl get sandboxes 2>&1 | head -5;
 echo '=== CMUX ===' && cmux version 2>&1;
 echo '=== GIT ===' && git --version && cd ~/github/Ara && git remote -v && git branch --show-current && git worktree list | head -8;
 echo '---DONE---'
 \n"
-sleep 12
+sleep 14
 cmux capture-pane --surface "$WORKER" --scrollback
 ```
 
@@ -71,6 +72,7 @@ railway status
 | stripe | `customers list` succeeds | `stripe login` — never paste `config --list` |
 | vercel | `vercel whoami` | `vercel login` |
 | linear | `team list` shows teams | `export LINEAR_API_KEY=lin_api_xxx` |
+| blaxel | `bl get sandboxes` lists sandboxes | `bl login ara` |
 | cmux | `cmux version` | Install cmux |
 | git | sensible remote in Ara | N/A |
 
@@ -89,8 +91,10 @@ Print a table:
 | stripe   | 1.x.x   | PASS   | API call OK          |
 | vercel   | 50.x    | PASS   | User: adi@ara.so     |
 | linear   | 0.3.x   | PASS   | Ara team visible     |
+| blaxel   | x.x.x   | PASS   | Sandboxes visible    |
+| stripe   | 1.x.x   | PASS   | API call OK          |
 | cmux     | x.x.x   | PASS   | Running              |
 | git      | 2.x.x   | PASS   | Branch: main         |
 
-Ready: 8/8 — All systems go.
+Ready: 10/10 — All systems go.
 ```
