@@ -339,13 +339,44 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
     }
     Bun.spawnSync(["pkill", "-9", "-f", "index.ts poll --loop"], { stdout: "pipe", stderr: "pipe" });
     installAsBackground(apiKey);
-    console.log(`✓ ae poll running — move a Linear issue to In Progress to spawn ae wt`);
-    console.log(`  Ctrl-C to stop watching (daemon keeps running)\n`);
-    // Stay live as a monitor — tail the poll log
-    const tail = Bun.spawn(["tail", "-f", resolve(homedir(), ".ae-poll.log")],
-      { stdout: "inherit", stderr: "ignore" });
-    process.on("SIGINT", () => { tail.kill(); process.exit(0); });
-    await tail.exited;
+    // Live dashboard — redraws every 3s like ae status
+    const DOTS = ["⋯", " ⋯", "  ⋯"];
+    let tick = 0;
+    process.on("SIGINT", () => { process.stdout.write("\x1b[?25h\n"); process.exit(0); });
+    process.stdout.write("\x1b[?25l"); // hide cursor
+    while (true) {
+      const state = loadState();
+      const entries = Object.values(state.tracked);
+      const dot = DOTS[tick % DOTS.length];
+      const lines: string[] = [];
+      lines.push("");
+      lines.push(`  \x1b[1mae poll\x1b[0m — Linear → cmux  \x1b[2m(Ctrl-C to exit, daemon keeps running)\x1b[0m`);
+      lines.push("  " + "─".repeat(72));
+      if (entries.length === 0) {
+        lines.push("  \x1b[2mNo tracked issues — move a Linear issue to In Progress to spawn ae wt\x1b[0m");
+      } else {
+        lines.push(`  \x1b[2m${"ISSUE".padEnd(10)} ${"TITLE".padEnd(38)} STATUS\x1b[0m`);
+        for (const t of entries) {
+          const title = t.title.length > 36 ? t.title.slice(0, 35) + "…" : t.title;
+          let status: string;
+          if (t.linearState === "in-progress") status = `\x1b[33m${dot} spawning\x1b[0m`;
+          else if (t.linearState === "in-review") status = `\x1b[36mPR open  \x1b[2m#${t.prNumber ?? "?"}\x1b[0m`;
+          else status = `\x1b[32m✓ done\x1b[0m`;
+          lines.push(`  ${t.identifier.padEnd(10)} ${title.padEnd(38)} ${status}`);
+          if (t.prNumber && t.linearState !== "in-progress") {
+            // Show PR URL from state if available — gh pr view would be slow
+            lines.push(`  ${" ".padEnd(10)} \x1b[2mhttps://github.com/Aradotso/Ara/pull/${t.prNumber}\x1b[0m`);
+          }
+        }
+      }
+      lines.push("");
+      const out = lines.join("\n");
+      const lineCount = lines.length;
+      process.stdout.write("\x1b[2J\x1b[H" + out);
+      tick++;
+      await Bun.sleep(3_000);
+      void lineCount;
+    }
     return 0;
   }
 
