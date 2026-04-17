@@ -66,10 +66,7 @@ Usage: ae start
   const brSplit    = await cmuxJson(["new-split", "down", "--workspace", WS, "--panel", PANE_R]);
   const SURF_WATCHER = brSplit.surface_ref as string; // bottom-right: watcher logs
 
-  // ── Resize ────────────────────────────────────────────────────────────────
   await Bun.sleep(800);
-  Bun.spawnSync(["cmux", "resize-pane", "--workspace", WS, "--pane", PANE_L, "-R", "--amount", "360"]);
-  Bun.spawnSync(["cmux", "resize-pane", "--workspace", WS, "--pane", PANE_R, "-D", "--amount", "200"]);
 
   // ── Watcher in bottom-right ───────────────────────────────────────────────
   mkdirSync(TRIGGER_DIR, { recursive: true });

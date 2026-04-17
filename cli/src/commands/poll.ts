@@ -331,7 +331,8 @@ Logs: ~/.ae-poll.log   State: ~/.ae-poll-state.json
   }
 
   // Default (no flags): full setup + start daemon
-  if (!argv.includes("--loop")) {
+  const SUBCOMMANDS = new Set(["status", "kill", "setup", "watch", "--stop", "--uninstall", "--status", "--watch", "--loop"]);
+  if (argv.length === 0 || !SUBCOMMANDS.has(argv[0])) {
     if (!process.env.CMUX_WORKSPACE_ID) {
       console.error("ae poll must be run from inside a cmux terminal.");
       return 1;
