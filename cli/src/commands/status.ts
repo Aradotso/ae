@@ -128,30 +128,41 @@ function portLabel(alive: boolean): string {
 
 // ─── gc: destroy a merged worktree ──────────────────────────────────────────
 
+async function killPort(port: number, label: string): Promise<void> {
+  const r = await run(["lsof", "-ti", `tcp:${port}`]);
+  if (r.code === 0 && r.out.trim()) {
+    for (const pid of r.out.trim().split("\n")) {
+      await run(["kill", "-9", pid.trim()]);
+    }
+    console.log(`     killed pids on :${port} (${label})`);
+  }
+}
+
 async function gcWorktree(wt: WorktreeInfo, repoRoot: string): Promise<void> {
   console.log(`\n  GC: ${wt.name} (PR #${wt.prNumber} merged)`);
 
-  // 1. Kill all processes on wt ports
-  for (const t of wt.tunnels) {
-    const r = await run(["lsof", "-ti", `tcp:${t.addr}`]);
-    if (r.code === 0 && r.out.trim()) {
-      const pids = r.out.trim().split("\n");
-      for (const pid of pids) {
-        await run(["kill", "-9", pid.trim()]);
-      }
-      console.log(`     killed pids on :${t.addr} (${t.name})`);
+  // 1. Kill ports — from ngrok.yml tunnels if present, otherwise derive from
+  //    agent number slot (base + N-1) so manually-deleted worktrees still clean up.
+  if (wt.tunnels.length > 0) {
+    for (const t of wt.tunnels) {
+      await killPort(t.addr, t.name);
+      try {
+        await fetch(`http://127.0.0.1:4040/api/tunnels/${encodeURIComponent(t.name)}`, {
+          method: "DELETE",
+          signal: AbortSignal.timeout(2000),
+        });
+        console.log(`     removed ngrok tunnel ${t.name}`);
+      } catch {}
     }
-    // Remove ngrok tunnel if agent is running
-    try {
-      await fetch(`http://127.0.0.1:4040/api/tunnels/${encodeURIComponent(t.name)}`, {
-        method: "DELETE",
-        signal: AbortSignal.timeout(2000),
-      });
-      console.log(`     removed ngrok tunnel ${t.name}`);
-    } catch {}
+  } else if (wt.agentN != null) {
+    // No ngrok.yml — derive ports from agent slot
+    const slot = wt.agentN - 1;
+    await killPort(5173 + slot, `app-${wt.agentN} (derived)`);
+    await killPort(3000 + slot, `mkt-${wt.agentN} (derived)`);
+    await killPort(4000 + slot, `api-${wt.agentN} (derived)`);
   }
 
-  // 2. Remove git worktree
+  // 2. Remove git worktree (--force handles missing directory)
   await run(["git", "worktree", "remove", "--force", wt.path], repoRoot);
   console.log(`     removed worktree ${wt.path}`);
 
@@ -192,6 +203,9 @@ Columns: agent · branch · app/mkt/api ports (●=up ○=down) · PR state
 
   // Only worktrees under .worktrees/ (skip the main tree)
   const agentWts = allWts.filter((w) => w.path.startsWith(wtRoot + "/"));
+
+  // Also prune git's worktree refs for directories that no longer exist
+  await run(["git", "worktree", "prune"], repoRoot);
 
   if (agentWts.length === 0) {
     console.log("No agent worktrees active. Run `ae wt <name>` to create one.");
