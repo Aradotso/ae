@@ -16,7 +16,15 @@ import { realpathSync } from "node:fs";
 
 const _self = realpathSync(import.meta.url.replace(/^file:\/\//, ""));
 const _pkg = JSON.parse(readFileSync(resolve(dirname(_self), "../package.json"), "utf8"));
-const VERSION: string = _pkg.version ?? "?";
+const [_major, _minor] = ((_pkg.version as string) ?? "0.2").split(".");
+const _repoRoot = resolve(dirname(_self), "../..");
+const _commitCount = (() => {
+  try {
+    const r = Bun.spawnSync(["git", "rev-list", "--count", "HEAD"], { cwd: _repoRoot });
+    return r.stdout.toString().trim() || "0";
+  } catch { return "0"; }
+})();
+const VERSION = `${_major}.${_minor}.${_commitCount}`;
 
 type NativeCommand = {
   name: string;
