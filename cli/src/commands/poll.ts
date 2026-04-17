@@ -103,7 +103,7 @@ function spawnWt(title: string): void {
     env: {
       ...process.env,
       CMUX_WORKSPACE_ID: process.env.CMUX_WORKSPACE_ID ?? "poll",
-      PATH: `${homedir()}/.bun/bin:${homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
+      PATH: `${homedir()}/.bun/bin:${homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin`,
       HOME: homedir(),
     },
     stdout: openSync("/tmp/ae-wt-spawn.log", "a"),
