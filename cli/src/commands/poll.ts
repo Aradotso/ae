@@ -93,15 +93,22 @@ async function getPrForBranch(branch: string): Promise<{ number: number; state: 
   } catch { return null; }
 }
 
+const AE_BIN = Bun.which("ae") ?? resolve(homedir(), ".bun/bin/ae");
+
 function spawnWt(title: string): void {
-  // Write a .command file and `open` it — macOS opens .command files in
-  // Terminal.app automatically without requiring Automation permissions
-  // (osascript → Terminal is blocked from launchd user agents).
-  const safe = title.replace(/'/g, "'\\''");
-  const script = `#!/bin/bash\nexport PATH="${homedir()}/.bun/bin:${homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"\nae wt '${safe}'\n`;
-  const tmp = `/tmp/ae-wt-${Date.now()}.command`;
-  writeFileSync(tmp, script, { mode: 0o755 });
-  Bun.spawnSync(["open", tmp]);
+  // Spawn ae wt directly — it creates its own cmux workspace.
+  // CMUX_WORKSPACE_ID just needs to be non-empty to trigger the cmux path in ae wt.
+  const child = Bun.spawn([AE_BIN, "wt", title], {
+    cwd: ARA_REPO,
+    env: {
+      ...process.env,
+      CMUX_WORKSPACE_ID: process.env.CMUX_WORKSPACE_ID ?? "poll",
+      PATH: `${homedir()}/.bun/bin:${homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
+      HOME: homedir(),
+    },
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  child.unref(); // don't block the poll loop
 }
 
 // ─── core poll ────────────────────────────────────────────────────────────────
