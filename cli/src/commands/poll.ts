@@ -105,7 +105,7 @@ const SPAWN_PATH = [
 ].join(":");
 
 const SESSION_FILE = resolve(homedir(), ".ae-cmux-session");
-const CMUX_BIN = Bun.which("cmux") ?? "/Applications/cmux.app/Contents/Resources/bin/cmux";
+const CMUX_BIN = "/Applications/cmux.app/Contents/Resources/bin/cmux";
 
 function loadCmuxSession(): { ws: string; surface: string } | null {
   try {
@@ -125,12 +125,12 @@ function spawnWt(title: string): void {
 
   if (session) {
     // cmux send works from background processes — inject ae wt into an existing shell
-    // The target shell is inside cmux so it has full socket access
     const cmd = `ae wt '${safe}'\n`;
+    console.log(`[poll] cmux send via ${CMUX_BIN} to ${session.surface}`);
     const r = Bun.spawnSync([CMUX_BIN, "send", "--workspace", session.ws, "--surface", session.surface, cmd],
       { stdout: "pipe", stderr: "pipe" });
-    if (r.exitCode === 0) { console.log(`[poll] sent to cmux surface ${session.surface}`); return; }
-    console.warn(`[poll] cmux send failed (${r.exitCode}): ${r.stderr.toString().trim()}`);
+    if (r.exitCode === 0) { console.log(`[poll] ✓ sent to cmux surface ${session.surface}`); return; }
+    console.warn(`[poll] cmux send failed (${r.exitCode}): ${r.stderr.toString().trim()}, stdout: ${r.stdout.toString().trim()}`);
   }
 
   // Fallback: background bash (services only, no cmux layout)
