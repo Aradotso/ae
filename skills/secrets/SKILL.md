@@ -12,18 +12,27 @@ description: Ara's secrets convention — all runtime credentials live in Infisi
 Project **Ara-passwords** in Infisical, folders by service.
 
 - Project ID: `6d518288-7854-49d2-aa42-8ffd285dafa1`
-- Environments: `dev`, `staging`, `prod`
+- Environments: currently `dev` only (more can be added via Infisical UI later — `staging`, `prod`)
 
 Folder layout:
 
 | Folder | Who uses it |
 |--------|-------------|
-| `/shared/` | Multi-service: Supabase, LLM providers, Stripe, Linear, Exa, Cloudflare, PostHog, Axiom, etc. |
-| `/ara-api/` | `ara-api` backend — AUTOMATION_*, CLUSTER_SECRET, ENCRYPTION_KEY, DOMAIN_SUFFIX, Blaxel, etc. |
+| `/shared/` | Truly-shared infra (Supabase, LLM providers, Stripe keys, Linear, Exa, Cloudflare, PostHog, Axiom, etc.). **NOT for OAuth clients** — those are per-service. |
+| `/ara-api/` | `ara-api` backend — AUTOMATION_*, CLUSTER_SECRET, ENCRYPTION_KEY, DOMAIN_SUFFIX, Blaxel, **ara.so Google OAuth client** |
 | `/ara-web/` | Frontend web app — VITE_* build-time vars |
-| `/text-ara-so/` | text.ara.so SMS service — LINQ_* |
-| `/mcp/` | ara.engineer/mcp (the MCP server) — RESEND_API_KEY and service-specific keys |
-| `/cli/` | `ae` CLI — tokens the CLI needs (GH, etc.) |
+| `/text-ara-so/` | text.ara.so SMS service — LINQ_*, **text.ara.so Google OAuth client** |
+| `/mcp/` | ara.engineer/mcp (the MCP server) — RESEND_API_KEY + downstream tool keys, **ara.engineer Google OAuth client** (`main-oauth-internal-mcps`) |
+| `/cli/` | `aracli` CLI — tokens the CLI needs (GH, etc.) |
+
+### Per-service OAuth clients — do NOT mix
+
+`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are **per-service**, never in `/shared/`.
+Each public surface (ara.so, text.ara.so, ara.engineer/mcp) has its own OAuth
+client in Google Cloud Console with its own authorized redirect URIs. Putting
+one in `/shared/` is a maintenance trap — a redirect URI added for one service
+would pollute the whitelist of another. Rule of thumb: if it's an OAuth
+credential, it lives next to the service that uses it.
 
 ## How to fetch
 
