@@ -45,13 +45,10 @@ Hardcoded IDs (skip the discovery roundtrips):
 - Ara-passwords project ID: \`6d518288-7854-49d2-aa42-8ffd285dafa1\`
 - Environments: \`dev\`, \`staging\`, \`prod\`
 
-Folder layout:
-- \`/shared/\` — used by multiple services (LLM keys, Supabase, Stripe, etc.)
-- \`/ara-api/\` — the main backend service (ara-api on Railway)
-- \`/ara-web/\` — frontend web app (VITE_* vars)
-- \`/text-ara-so/\` — text.ara.so SMS service (LINQ_*)
-- \`/mcp/\` — this MCP server's own keys
-- \`/cli/\` — the ae CLI
+Folder layout — one per GitHub repo:
+- \`/ara-engineer/\` — this repo (mcps + cli + site + skills)
+- \`/text-ara-so/\` — text.ara.so repo (SMS service, Linq)
+- \`/ara-so/\` — ara.so megarepo (backend API, web app, shared infra, Stripe, Supabase, LLM keys)
 
 Typical lookup: call \`infisical_list_secrets\` with env + path to see
 what's there, or \`infisical_get_secret\` for a specific key. Railway

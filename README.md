@@ -42,7 +42,10 @@ and every teammate's next `aracli mcp setup-*` picks it up, no CLI release neede
 
 - Project: `Ara-passwords` (id `6d518288-7854-49d2-aa42-8ffd285dafa1`)
 - Envs: `dev`, `staging`, `prod`
-- Folders: `/shared/`, `/ara-api/`, `/ara-web/`, `/text-ara-so/`, `/mcp/`, `/cli/`
+- Folders — one per GitHub repo:
+  - `/ara-engineer/` (this repo: mcp + cli + site + skills)
+  - `/text-ara-so/` (github.com/Aradotso/text.ara.so)
+  - `/ara-so/` (github.com/Aradotso/Ara megarepo — api + web + shared)
 
 Services wrap their start command with `infisical run --projectId=... --env=prod
 --path=/<service> -- <cmd>`. Railway holds only the machine-identity bootstrap
