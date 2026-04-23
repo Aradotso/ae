@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, realpathSync, readFileSync, writeFileSync, statS
 import { resolve, dirname, basename } from "node:path";
 import { homedir } from "node:os";
 import { SHIMS } from "../shims.ts";
+import { syncSkills, formatSyncResult } from "../skills-sync.ts";
 
 type Args = { help: boolean; check: boolean; force: boolean };
 
@@ -154,6 +155,12 @@ This updates the repo at $(dirname $(readlink -f $(which ae)))/../..
     if (_exists(src)) link(src, s.name);
   }
 
+  console.log("Syncing skills into ~/.claude/skills");
+  const syncResult = syncSkills();
+  const syncLine = formatSyncResult(syncResult);
+  if (syncLine) console.log(`  ${syncLine}`);
+  else console.log(`  up to date (${syncResult.alreadyLinked.length} linked)`);
+
   writeCheckStamp(0);
   console.log(`\nUpdated. ae --version: ${await currentVersion(repo)}`);
   return 0;
@@ -292,6 +299,12 @@ export async function maybeAutoUpdate(argv: string[]): Promise<void> {
       const src = resolve(repo, "cli/shims", s.name);
       if (_exists(src)) link(src, s.name);
     }
+  } catch {}
+
+  // Silent skills sync during auto-update — only print if something changed.
+  try {
+    const syncLine = formatSyncResult(syncSkills());
+    if (syncLine) process.stderr.write(`  ${syncLine}\n`);
   } catch {}
 
   writeCheckStamp(0);

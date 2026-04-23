@@ -10,7 +10,9 @@ import { listCommand } from "./commands/list.ts";
 import { showCommand } from "./commands/show.ts";
 import { updateCommand, maybeKickBackgroundCheck, maybeAutoUpdate, updateBanner } from "./commands/update.ts";
 import { urlCommand } from "./commands/url.ts";
+import { skillsCommand } from "./commands/skills.ts";
 import { listSkills } from "./skills.ts";
+import { maybeBootstrapSkills } from "./skills-bootstrap.ts";
 import { SHIMS, shimPath } from "./shims.ts";
 
 import { readFileSync } from "node:fs";
@@ -112,8 +114,13 @@ const coreCommands: NativeCommand[] = [
   },
   {
     name: "update",
-    summary: "Pull latest ae, reinstall, relink shims (`--check` to only test)",
+    summary: "Pull latest ae, reinstall, relink shims + skills (`--check` to only test)",
     run: updateCommand,
+  },
+  {
+    name: "skills",
+    summary: "Manage ~/.claude/skills symlinks (subcommands: sync, status)",
+    run: skillsCommand,
   },
 ];
 
@@ -164,6 +171,12 @@ function printHelp() {
 
 async function main() {
   const argv = Bun.argv.slice(2);
+
+  // First-run bootstrap: silently link this repo's skills into
+  // ~/.claude/skills the very first time `ae` runs on this machine (and
+  // at most once per day after). Makes `ae` work out of the box without
+  // `ae update` / `ae skills sync`.
+  maybeBootstrapSkills();
 
   // Auto-update on every invocation if the cached behind-count > 0.
   // Silent if already up to date. Skips for dev checkouts with local changes.
