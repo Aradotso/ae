@@ -4,6 +4,11 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "mcp.ara.engineer" }],
+      "destination": "https://mcp-production-fad4.up.railway.app/:path*"
+    },
     { "source": "/install", "destination": "/install.sh" }
   ],
   "headers": [
