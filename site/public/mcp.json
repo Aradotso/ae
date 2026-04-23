@@ -4,7 +4,7 @@
   "updated": "2026-04-22",
   "description": "Canonical catalog of MCP servers the Ara team uses. ae reads this to wire up Claude, Codex, Cursor, and ChatGPT. The static directory page at /mcp also renders from this file.",
   "ara_endpoint": {
-    "url": "https://mcp.ara.engineer/mcp",
+    "url": "https://mcp.ara.engineer",
     "fallback_url": "https://mcp-production-fad4.up.railway.app/mcp",
     "auth": "oauth",
     "description": "Ara's managed MCP server — hosts tools for services without an official MCP, or with Ara-specific defaults baked in."
@@ -14,7 +14,7 @@
       "id": "ara-mcp",
       "name": "Ara MCP",
       "source": "ara",
-      "url": "https://mcp.ara.engineer/mcp",
+      "url": "https://mcp.ara.engineer",
       "auth": "oauth",
       "allowlist": "@ara.so Google accounts",
       "tools": ["railway_*", "send_email", "list_emails", "get_email", "search_products", "search_stores", "create_cart", "check_order_status", "generate_video", "check_video_status", "edit_video", "blaxel_*", "engain_*", "linq_*", "postiz_*", "braintrust_*", "axiom_*"],
