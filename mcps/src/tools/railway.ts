@@ -42,10 +42,19 @@ export function registerRailwayTools(server: McpServer) {
 
   // ─── Account ───────────────────────────────────────────────────────────────
 
-  server.tool("railway_whoami", "Get the authenticated Railway user info", {}, async () => {
+  server.tool("railway_whoami", "Get info about the Railway credential this MCP is using. Works with both personal-account tokens (returns the user) and project tokens (returns the project + workspace).", {}, async () => {
+    // Personal tokens can call `me`; project tokens can't. Try `me` first,
+    // fall back to the token's project context.
     try {
       return ok(await railwayFetch(`query { me { id name email avatar registrationStatus } }`));
-    } catch (e: any) { return err(e); }
+    } catch (personalErr: any) {
+      try {
+        const data = await railwayFetch(`query { projectToken { project { id name team { name } } environment { id name } } }`);
+        return ok({ tokenType: "project", ...data });
+      } catch (projectErr: any) {
+        return err(projectErr);
+      }
+    }
   });
 
   // ─── Projects ──────────────────────────────────────────────────────────────

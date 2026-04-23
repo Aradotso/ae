@@ -10,11 +10,17 @@ async function axiomFetch(path: string, options: RequestInit = {}) {
     throw new Error("Axiom token not configured on server (AXIOM_QUERY_TOKEN or AXIOM_TOKEN)");
   }
 
+  // Axiom requires X-Axiom-Org-ID on every request — without it the API
+  // returns 400 "'X-AXIOM-ORG-ID' header must be set".
+  const orgId = process.env.AXIOM_ORG_ID;
+  const orgHeader: Record<string, string> = orgId ? { "X-Axiom-Org-ID": orgId } : {};
+
   const res = await fetch(`${AXIOM_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
+      ...orgHeader,
       ...options.headers,
     },
   });
