@@ -1,7 +1,7 @@
 {
-  "name": "ara-connectors",
+  "name": "mcp",
   "version": "1.0.0",
-  "description": "Centralized MCP server for Ara connectors — DoorDash, Higgsfield, and more",
+  "description": "Ara's managed MCP server (mcp.ara.engineer). Railway, Resend, Braintrust, Axiom, Higgsfield, Blaxel, Engain, Linq, Postiz, Instacart.",
   "type": "module",
   "scripts": {
     "start": "bun run src/index.ts",

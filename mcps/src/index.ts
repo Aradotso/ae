@@ -24,9 +24,9 @@ const MCP_PATHS = new Set(["/", "/mcp"]);
 
 // ─── Server instructions shown to every agent on session init ───
 // Sent as the system message to any MCP-speaking agent that connects
-// (ChatGPT custom connectors, Codex CLI, Claude Desktop/Code, etc.).
-// Keep it skimmable — agents waste time exploring the filesystem otherwise.
-const ARA_INSTRUCTIONS = `# Ara Connectors
+// (ChatGPT, Codex CLI, Cursor, Claude Desktop/Code, etc.). Keep it
+// skimmable — agents waste time exploring the filesystem otherwise.
+const ARA_INSTRUCTIONS = `# Ara MCP
 
 You have direct access to Ara's internal tools via MCP. For Railway and
 the other services below, just call these tools — don't shell out, don't
@@ -46,8 +46,8 @@ Hardcoded IDs (skip the discovery roundtrips):
 - Service \`ara-api\`: \`304984ab-6cc0-42cf-80e4-9cc9b6529b21\`
 
 Typical lookup: call \`railway_get_variables\` with the three IDs above.
-If the key isn't there, check \`ara-connectors\` or \`locomotive\` via
-\`railway_list_projects\`.
+If the key isn't there, check \`text-ara-so\` or the \`ara.engineer\`
+project (which hosts this MCP server itself) via \`railway_list_projects\`.
 
 Do NOT: ask the user to paste credentials, read \`.env\`/\`.env.local\`
 hoping they exist, generate fake values, or search the filesystem. If a
@@ -72,11 +72,11 @@ value isn't in any Railway service, THEN ask the user.
 
 Call \`tools/list\` for full schemas.
 
-## This connector's own IDs (if you need to manage it)
+## This MCP's own IDs (if you need to manage it)
 
-- Project \`ara-connectors\`: \`b67dca16-5fea-41b9-ab0e-a7234237adc3\`
-- Environment \`production\`: \`f4e22ed4-dde1-4aec-b1b1-375cc715ec38\`
-- Service \`ara-connectors\`: \`fcabbab7-ec75-4052-bbcd-b5d1dd974ab8\`
+- Project \`ara.engineer\`: \`07bb290d-ae52-4491-936b-7e56d2165840\`
+- Environment \`production\`: \`813c7fb7-7eeb-4ab3-b74b-0aaab0694508\`
+- Service \`mcp\`: \`81a874eb-1c6c-40c7-b014-1b06507a1e64\`
 
 ## Working inside a repo vs. standalone
 
@@ -92,8 +92,8 @@ confirm before destructive writes (deletes, prod redeploys, sending
 real emails). If a tool errors with "API key not configured", tell the
 user which env var is missing — don't invent credentials.
 
-Auto-updates: new tools pushed to \`Aradotso/ara-connectors\` on GitHub
-appear on the next session.
+Auto-updates: this MCP lives at \`Aradotso/ara.engineer\` → \`mcps/\`.
+Pushes to main auto-deploy; new tools appear on the next session.
 `;
 
 // ─── Express app ───
@@ -121,7 +121,7 @@ app.use(oauthRouter);
 
 // ─── Health check ───
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "ara-connectors", version: "1.0.0" });
+  res.json({ status: "ok", service: "ara-mcp", version: "1.0.0" });
 });
 
 // ─── MCP over Streamable HTTP ───
@@ -130,7 +130,7 @@ const sessions = new Map<string, { server: McpServer; transport: StreamableHTTPS
 function createMcpSession(): { server: McpServer; transport: StreamableHTTPServerTransport } {
   const server = new McpServer(
     {
-      name: "ara-connectors",
+      name: "ara-mcp",
       version: "1.0.0",
     },
     {
@@ -187,13 +187,13 @@ async function handleMcp(req: AuthenticatedRequest, res: express.Response) {
   res.status(400).json({ error: "No valid session. Send a POST with an initialize request first." });
 }
 
-// Serve MCP on both "/" and "/mcp" — Claude.ai uses "/", direct clients use "/mcp"
+// Serve MCP on both "/" and "/mcp" — claude.ai uses "/", direct clients use "/mcp"
 app.all("/mcp", requireAuth, handleMcp);
 app.all("/", requireAuth, handleMcp);
 
 // ─── Start ───
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Ara Connectors MCP server running on port ${PORT}`);
+  console.log(`Ara MCP server running on port ${PORT}`);
   console.log(`  OAuth discovery: /.well-known/oauth-authorization-server`);
   console.log(`  MCP endpoint:    / and /mcp`);
   console.log(`  Health:          /health`);

@@ -41,9 +41,16 @@ export function targetSkillsDir(): string {
 }
 
 export function sourceSkillsDir(): string {
-  // This file lives at <repo>/cli/src/skills-sync.ts, so skills = ../skills.
+  // This file lives at <repo>/cli/src/skills-sync.ts. After the monorepo
+  // unification, skills/ is a top-level sibling of cli/, so the path is
+  // ../../skills. Fall back to ../skills for old checkouts (where skills
+  // were still under cli/skills) so upgrades don't break mid-flight.
   const self = realpathSync(import.meta.url.replace(/^file:\/\//, ""));
-  return resolve(dirname(self), "..", "skills");
+  const repoRoot = resolve(dirname(self), "..", "..");
+  const newLayout = resolve(repoRoot, "skills");
+  const oldLayout = resolve(dirname(self), "..", "skills");
+  if (existsSync(newLayout)) return newLayout;
+  return oldLayout;
 }
 
 function classify(path: string): "none" | "symlink" | "real" {

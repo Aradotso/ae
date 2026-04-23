@@ -7,7 +7,7 @@ skill library, the hosted MCP connectors, and the landing site.
 |------|------|---------------|
 | [`cli/`](./cli) | The `ae` CLI (Bun + TypeScript). Binary: `ae`. Distributed via the install one-liner. | user machines |
 | [`skills/`](./skills) | Team skill library. Each subfolder is a SKILL.md + assets. Auto-linked into `~/.claude/skills/` by the installer. | user machines |
-| [`mcps/`](./mcps) | The Ara-managed MCP server. OAuth 2.1 + Railway, Resend, Braintrust, Axiom, Higgsfield, and more. | Railway → `connectors.ara.engineer` |
+| [`mcps/`](./mcps) | The Ara-managed MCP server. OAuth 2.1 + Railway, Resend, Braintrust, Axiom, Higgsfield, and more. | Railway → `mcp.ara.engineer` |
 | [`site/`](./site) | Landing page + `/mcp` catalog + `/install` script. | Vercel → `ara.engineer` |
 
 ## Install
@@ -42,8 +42,9 @@ and every teammate's next `ae mcp setup-*` picks it up, no CLI release needed.
 - `ara-api` (on the `Ara Backend` project, `prd` environment) is the canonical
   source — Stripe, OpenAI, Anthropic, Supabase, GitHub, Slack, Resend, Google,
   Cloudflare, Axiom, Braintrust, etc. all live there.
-- `ara-connectors` holds its own keys (Resend, Higgsfield, etc.) for tools the
-  MCP server proxies to.
+- The `ara.engineer` Railway project holds the MCP server's own keys
+  (Resend, Higgsfield, Braintrust, Axiom, etc.) for tools the MCP
+  proxies to.
 - Agents connected to the Ara MCP discover everything via `railway_get_variables`
   — the `ARA_INSTRUCTIONS` sent on session init tell them to start with
   `ara-api` and fall back to other services.

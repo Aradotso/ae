@@ -4,9 +4,10 @@ import { z } from "zod";
 const AXIOM_BASE = "https://api.axiom.co/v1";
 
 async function axiomFetch(path: string, options: RequestInit = {}) {
-  const apiKey = process.env.AXIOM_API_TOKEN;
+  // AXIOM_TOKEN = full access; AXIOM_QUERY_TOKEN = read-only. Prefer read-only.
+  const apiKey = process.env.AXIOM_QUERY_TOKEN ?? process.env.AXIOM_TOKEN;
   if (!apiKey) {
-    throw new Error("Axiom API token not configured on server (AXIOM_API_TOKEN)");
+    throw new Error("Axiom token not configured on server (AXIOM_QUERY_TOKEN or AXIOM_TOKEN)");
   }
 
   const res = await fetch(`${AXIOM_BASE}${path}`, {
@@ -32,8 +33,9 @@ function err(message: string) {
   return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
 }
 
-// Ara's default dataset — the api/web/app services all log here
-const DEFAULT_DATASET = process.env.AXIOM_DEFAULT_DATASET ?? "logs";
+// Ara's default dataset — the api/web/app services all log here.
+// Matches the AXIOM_DATASET env var used by other Ara services.
+const DEFAULT_DATASET = process.env.AXIOM_DATASET ?? "logs";
 
 export function registerAxiomTools(server: McpServer) {
   server.tool(

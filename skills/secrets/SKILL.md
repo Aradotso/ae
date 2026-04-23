@@ -29,7 +29,7 @@ Typical fetch:
 }
 ```
 
-If the key isn't on `ara-api`, check `ara-connectors` or `locomotive` via `railway_list_projects`, then pass their project/environment/service IDs to `railway_get_variables`.
+If the key isn't on `ara-api`, check `text-ara-so` or the `ara.engineer` project (which hosts the MCP server itself) via `railway_list_projects`, then pass their project/environment/service IDs to `railway_get_variables`.
 
 ## What lives where
 
@@ -37,7 +37,7 @@ If the key isn't on `ara-api`, check `ara-connectors` or `locomotive` via `railw
 |----------|----------|
 | Third-party API keys (Stripe, OpenAI, Anthropic, Supabase, Resend, Slack, Google, Cloudflare, Axiom, Braintrust, etc.) | Railway → `ara-api` |
 | DB URLs, internal service URLs | Railway → the service that owns them |
-| MCP connector keys (the keys ara-connectors uses) | Railway → `ara-connectors` |
+| MCP server's own downstream keys (Resend, Higgsfield, Braintrust, Axiom, etc.) | Railway → `ara.engineer/mcp` |
 | Human logins, personal tokens, SSH keys | **1Password** (Ara Engineering vault) — not Railway |
 
 ## What NOT to do
@@ -56,4 +56,4 @@ If the key isn't on `ara-api`, check `ara-connectors` or `locomotive` via `railw
 
 ## Escalation
 
-If the key truly isn't in Railway anywhere, *then* ask the user. Be specific: `"the OPENAI_API_KEY variable isn't on ara-api/prd or ara-connectors/production — can you set it in Railway?"` rather than `"please paste your OpenAI key"`.
+If the key truly isn't in Railway anywhere, *then* ask the user. Be specific: `"the OPENAI_API_KEY variable isn't on ara-api/prd or ara.engineer/mcp — can you set it in Railway?"` rather than `"please paste your OpenAI key"`.
