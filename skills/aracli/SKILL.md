@@ -16,9 +16,10 @@ triggers:
 
 # aracli — the CLI and its skill pipeline
 
-> 🚦 **LIVE-UPDATE DEMO MARKER — 2026-04-23T22:40Z** — if you're reading this
-> in a Cursor or Claude Code session without re-opening, the skill pipeline
-> works end-to-end. Delete this block once verified.
+> 🚦 **LIVE-UPDATE DEMO MARKER — 2026-04-23T22:45Z** — second push. If you're
+> reading this timestamp (not the 22:40 one) in the same cursor session that
+> ran earlier, the symlink pipeline is propagating edits live. Delete this
+> block once verified.
 
 `aracli` is the Ara engineer CLI (`~/github/ara.engineer/cli/`). It used to
 be named `ae`, which still works as an alias pointing at the same binary.
