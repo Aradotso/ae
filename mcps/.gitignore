@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.env
+ara.db
+ara.db-wal
+ara.db-shm
