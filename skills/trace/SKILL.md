@@ -1,8 +1,8 @@
 ---
 name: trace
-version: 2.3.0
+version: 2.5.0
 description: |
-  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), `/trace score` (run the three trace-scope scorers across recent prod turns — hallucinations, tool budget, builder outcome), `/trace online` (push code scorers to Braintrust + wire the Automation rule for continuous scoring of every `webhook.inbound` trace — all 3 scorers including the gpt-5-mini hallucination judge), or `/trace grow` (harvest the week's worst-scored production traces into the `regression-v1` Braintrust dataset for replay regression tests).
+  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace top users` (aggregate: who messaged most in a time window — one latest-turn link per sender, table below), `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), `/trace score`, `/trace online`, or `/trace grow`. **When the user asks for users’ traces / links:** give **one permalink per user** — the **latest** `webhook.inbound` root only. **When they ask for top / busiest users over a time range:** use the **top users table** format (Msgs, User, single review link) — no per-thread “all turns” column unless they ask.
 allowed-tools:
   - Bash
   - Read
@@ -41,6 +41,48 @@ Tags on the root span include:
 - `round:1`, `round:2`, … (one per LLM step)
 - `tool:create_site`, `tool:write_file`, … (one per tool invoked)
 - `deploy:forced` (only when the safety net fires)
+
+---
+
+## When the user wants “traces for users” — one link per user (default)
+
+**Agent behavior (required):** If they ask for Braintrust links for specific people (by phone, email, or a list of users), default to **exactly one permalink per person** — the **most recent** `webhook.inbound` for that sender — **not** the first/oldest turn and **not** a list of every turn unless they ask for that.
+
+- **How to pick the span:** From `bt view logs` JSON (use `--preview-length 20000` so `metadata` parses) or from SQL, filter roots where `span_attributes.name = 'webhook.inbound'`, match `metadata.phone_number` or `input.sender` (Linq can use an email), **sort by `created` DESC**, take **row 0**. The root’s `span_id` is the permalink id.
+- **Permalink (same id for r and s):**  
+  `https://www.braintrust.dev/app/Aradotso/p/Ara/logs?r=<root_span_id>&s=<root_span_id>`
+- **What that link is:** The **fullest single-turn trace in Braintrust** for that person — the whole `builder.run` tree for their **last** message. It is still **one** inbound iMessage, not a merged chat history. For “all turns as rows in the log table” or a thread-wide filter, add **one** second link:  
+  `https://www.braintrust.dev/app/Aradotso/p/Ara/logs?search=conversation%3A<chat_id>`  
+  (use `metadata.conversation_id` from any of their rows). Only include that if they want to browse every turn, not for the default “one link per user” ask.
+- **Do not** default to N permalinks for N turns when one link per user is enough.
+
+---
+
+## `/trace top users` — busiest users in a time window (default table)
+
+**When to use:** The user asks for *top users*, *who messaged the most*, *everyone who showed up after 3am*, *users over \[time\]*, *review all of them*, etc. — **except** when they name one person (then use `/trace user` / single latest link only).
+
+**Agent behavior (required output format):** A **markdown table with exactly three columns**, sorted by **`Msgs` descending** (tie-break: sender string ascending):
+
+| Msgs | User | Latest full trace |
+|-----:|------|-------------------|
+| … | `+1…` or `name@…` or `(unknown sender)` | `https://www.braintrust.dev/app/Aradotso/p/Ara/logs?r=<span_id>&s=<span_id>` |
+
+- **`Msgs`** = count of `webhook.inbound` root spans for that sender in the window (one per inbound iMessage).
+- **`User`** = `metadata.phone_number` or `input.sender` from the row; if missing after parse, `(unknown sender)`.
+- **`Latest full trace`** = **one** permalink: the **most recent** `span_id` among that sender’s rows (`created` max). Same `r` and `s` as that root id.
+- **Do not** add a second column for “all turns in thread” or `?search=conversation:…` unless the user explicitly asks for it.
+
+**How to build it (run and aggregate in the agent, not the user):**
+
+1. **Time window:** If the user gives a clock in **California** (e.g. “after 3am today”), convert `America/Los_Angeles` → UTC and filter `created >= cutoff`. If they say “last 24h”, use `bt view logs --window 24h`. Use a **wide enough** `--window` (e.g. `36h`, `48h`) so you do not miss edges; still **filter in code** to the exact cutoff if they gave one.
+2. **Fetch:** `bt view logs --project Ara --window <W> --limit 500 --json --preview-length 20000` (save stdout to a file if large). Truncated metadata breaks phone extraction.
+3. **Filter:** Keep only rows where `span_attributes.name == "webhook.inbound"`.
+4. **Group** by sender key: `metadata.phone_number || input.sender || "(unknown sender)"`.
+5. **Count** rows per sender; **sort** by count desc.
+6. **Latest span:** per sender, `span_id` from the row with max `created`.
+
+**One-line summary for the user** (optional): total distinct senders and total inbound turns in the window.
 
 ---
 
@@ -130,6 +172,8 @@ bt sql "SELECT created,
           AND metadata->>'phone_number' = '<phone>'
         ORDER BY created DESC LIMIT 50"
 ```
+
+**To answer “give me a trace link for this user” (default):** use **only the top row** of that `ORDER BY created DESC` result (or the same filter in `bt view logs` JSON, latest first). Build `?r=<span_id>&s=<span_id>`. If they need email-shaped handles, search `input.sender` or the same `--search` string — the metadata key is still `phone_number` in the trace even for `user@…` Linq senders.
 
 ---
 
@@ -411,6 +455,8 @@ User says "my deploy for fetch-dogs didn't work":
 | Command | Purpose |
 |---------|---------|
 | `bt view logs --project Ara` | Interactive log browser |
+| **`/trace top users` (time window)** | Aggregate `webhook.inbound` by sender → sort by count → table: **Msgs \| User \| Latest full trace** (one `?r=&s=` per row, no extra columns) |
+| **User-facing “one link per user”** | Latest `webhook.inbound` per sender → `?r=&s=` that root `span_id`; optional `?search=conversation%3A<chat_id>` only if they ask for all turns |
 | `bt view logs --project Ara --search <term>` | Substring / tag search |
 | `bt view logs --project Ara --window 24h` | Time window |
 | `bt view trace --trace-id <root> --project Ara --json` | Full span tree |
