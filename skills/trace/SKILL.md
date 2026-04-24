@@ -1,8 +1,8 @@
 ---
 name: trace
-version: 2.1.0
+version: 2.2.0
 description: |
-  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), or `/trace score` (run the three trace-scope scorers across recent prod turns — hallucinations, tool budget, builder outcome).
+  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), `/trace score` (run the three trace-scope scorers across recent prod turns — hallucinations, tool budget, builder outcome), or `/trace online` (push code scorers to Braintrust + wire the Automation rule for continuous scoring of every `webhook.inbound` trace).
 allowed-tools:
   - Bash
   - Read
@@ -276,6 +276,64 @@ npx braintrust eval evals/trace-scorers.eval.ts --push
 
 ---
 
+## `/trace online` — continuous scoring of every production trace
+
+The two **code scorers** (`tool_budget_ok`, `builder_outcome_ok`) can run
+server-side on every new log inside Braintrust. `preview_content_ok` is an
+LLM judge and stays local-only for now (needs Cerebras secret in BT's
+sandbox, deferred).
+
+**Push the scorers (first-time, and after any edit):**
+
+```bash
+cd text.ara.so/backend
+# IMPORTANT: BT requires a real node runtime. `bun` masquerading as
+# node@24 is rejected with "HTTP 500: Unsupported runtime".
+/opt/homebrew/opt/node@22/bin/node node_modules/.bin/braintrust push \
+  evals/push-scorers.ts --if-exists replace
+```
+
+They appear under **Ara → Scorers** as `tool_budget_ok` and `builder_outcome_ok`.
+
+**Wire the Automation rule (one-time, in the BT UI):**
+1. **Ara → Logs → Automations → Create automation rule**
+2. Name: `ara-score-webhook-inbound`
+3. Functions: add both `tool_budget_ok` and `builder_outcome_ok`
+4. Scope: `Trace`, idle timeout 30s
+5. Filter (SQL tab): `span_attributes.name = "webhook.inbound"`
+6. Sampling rate: **100%**
+7. Create rule
+
+**Backfill historical logs** (past 3d, up to 100):
+Automations → **Score existing logs** → pick both functions → Apply.
+
+**Read the score on every trace:**
+- Logs table shows `builder_outcome_ok` and `tool_budget_ok` columns with AVG
+  at the top. Click a row to see the span's individual score and reasoning.
+- **Sort/filter by score** to pull the worst turns first — primary workflow
+  for "what broke this week?".
+
+**What the online signal actually tells you:**
+- `tool_budget_ok` at ~100% avg = **healthy baseline / canary**. It only
+  fires when something regresses (a slow turn, a tool-thrash loop). Don't
+  expect daily signal — expect it to flash red the day something breaks.
+- `builder_outcome_ok` at ~90–95% avg = **ongoing signal**. The 5–10% of
+  failing turns are real: `outcome: noop` (chat/connect phase — no build
+  expected), tool errors, missing URL in reply. Filter by
+  `phase:build` tag to isolate the ones that should have produced a site.
+
+**When to tighten / loosen budgets:**
+- If `tool_budget_ok` avg stays 1.00 for weeks, tighten (e.g. duration 30→20s).
+- If it drops without a regression, loosen — you're seeing natural variance.
+
+**Closing the loop:**
+- Production trace scores poorly → open the span, read `reason` metadata.
+- Add the root-span input to `evals/datasets/regression-v1.ts` if it's a
+  pattern worth pinning. Next PR's replay-scoring catches regressions on it.
+- Fix, push PR, watch the GitHub Actions eval diff scores vs. baseline.
+
+---
+
 ## `/trace health` — is instrumentation live?
 
 ```bash
@@ -322,5 +380,7 @@ User says "my deploy for fetch-dogs didn't work":
 | `bt status --json` | Confirm active org/project |
 | `bun run scripts/score-recent-traces.ts N` | Run 3 scorers on last N `webhook.inbound` roots |
 | `npx braintrust eval evals/trace-scorers.eval.ts --push` | Ship scorers as a BT experiment |
+| `/opt/homebrew/opt/node@22/bin/node node_modules/.bin/braintrust push evals/push-scorers.ts --if-exists replace` | Push code scorers for online scoring (needs real node, not bun) |
+| BT UI → Logs → Automations → `ara-score-webhook-inbound` | Continuous scoring rule (filter `span_attributes.name = "webhook.inbound"`, 100% sampling) |
 
 See `/braintrust` for general `bt` CLI reference.
