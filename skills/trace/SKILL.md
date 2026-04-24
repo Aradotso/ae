@@ -1,8 +1,8 @@
 ---
 name: trace
-version: 2.2.0
+version: 2.3.0
 description: |
-  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), `/trace score` (run the three trace-scope scorers across recent prod turns — hallucinations, tool budget, builder outcome), or `/trace online` (push code scorers to Braintrust + wire the Automation rule for continuous scoring of every `webhook.inbound` trace).
+  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), `/trace score` (run the three trace-scope scorers across recent prod turns — hallucinations, tool budget, builder outcome), `/trace online` (push code scorers to Braintrust + wire the Automation rule for continuous scoring of every `webhook.inbound` trace — all 3 scorers including the gpt-5-mini hallucination judge), or `/trace grow` (harvest the week's worst-scored production traces into the `regression-v1` Braintrust dataset for replay regression tests).
 allowed-tools:
   - Bash
   - Read
@@ -278,12 +278,17 @@ npx braintrust eval evals/trace-scorers.eval.ts --push
 
 ## `/trace online` — continuous scoring of every production trace
 
-The two **code scorers** (`tool_budget_ok`, `builder_outcome_ok`) can run
-server-side on every new log inside Braintrust. `preview_content_ok` is an
-LLM judge and stays local-only for now (needs Cerebras secret in BT's
-sandbox, deferred).
+**All three scorers now run server-side on every webhook.inbound trace:**
+- `tool_budget_ok` — code scorer, speed/tool-count gate (canary)
+- `builder_outcome_ok` — code scorer, phase-aware hard gates (build turns = URL required, chat/connect = reply-only)
+- `preview_content_ok` — **LLM judge (gpt-5-mini via BT proxy)** classifying `pass` / `minor_issue` / `hallucination`. Catches silent "now live!" with zero deploy tool calls.
 
-**Push the scorers (first-time, and after any edit):**
+The LLM judge reads the root-span's input/output, walks child spans via
+`trace.getSpans()` to harvest `span_attributes.type == "tool"` → `tools_used[]`,
+then asks gpt-5-mini "does the reply match the tools actually invoked?". No
+Cerebras/OpenAI secret needed — BT proxies through their credits.
+
+**Push scorers (first-time, and after any edit):**
 
 ```bash
 cd text.ara.so/backend
@@ -293,44 +298,78 @@ cd text.ara.so/backend
   evals/push-scorers.ts --if-exists replace
 ```
 
-They appear under **Ara → Scorers** as `tool_budget_ok` and `builder_outcome_ok`.
+All three appear under **Ara → Scorers**.
 
-**Wire the Automation rule (one-time, in the BT UI):**
-1. **Ara → Logs → Automations → Create automation rule**
-2. Name: `ara-score-webhook-inbound`
-3. Functions: add both `tool_budget_ok` and `builder_outcome_ok`
-4. Scope: `Trace`, idle timeout 30s
-5. Filter (SQL tab): `span_attributes.name = "webhook.inbound"`
-6. Sampling rate: **100%**
-7. Create rule
+**Automation rule (already wired as `ara-score-turns`):**
+- Filter: `span_attributes.name = "webhook.inbound"`
+- Scorers: all three (code + LLM judge)
+- Sampling: 100%, idle timeout 30s
+
+`builder_outcome_ok` is **phase-aware** — non-build turns (chat, connect,
+soft_gate) use relaxed gates (reply ≥ 5 chars, no tool errors, benign
+outcome). No separate rule needed.
 
 **Backfill historical logs** (past 3d, up to 100):
-Automations → **Score existing logs** → pick both functions → Apply.
+Logs → Automations → **Score existing logs** → pick functions → Apply.
 
 **Read the score on every trace:**
-- Logs table shows `builder_outcome_ok` and `tool_budget_ok` columns with AVG
-  at the top. Click a row to see the span's individual score and reasoning.
-- **Sort/filter by score** to pull the worst turns first — primary workflow
-  for "what broke this week?".
+- Logs table shows all three columns with AVG at the top. Click a row → see
+  the span's individual score + `reason` metadata.
+- **Sort/filter by `preview_content_ok`** to find hallucinations; **sort by
+  `builder_outcome_ok`** to find real build failures.
 
-**What the online signal actually tells you:**
-- `tool_budget_ok` at ~100% avg = **healthy baseline / canary**. It only
-  fires when something regresses (a slow turn, a tool-thrash loop). Don't
-  expect daily signal — expect it to flash red the day something breaks.
-- `builder_outcome_ok` at ~90–95% avg = **ongoing signal**. The 5–10% of
-  failing turns are real: `outcome: noop` (chat/connect phase — no build
-  expected), tool errors, missing URL in reply. Filter by
-  `phase:build` tag to isolate the ones that should have produced a site.
+**What the online signal actually tells you (observed on ~100 prod traces):**
+- `tool_budget_ok` ≈ 100% avg = **canary baseline**. Stays at 1.00; only
+  drops when an individual turn regresses (e.g. a tool-thrash loop).
+- `builder_outcome_ok` ≈ 92–95% avg = **ongoing functional signal**. The 5–8%
+  failing are real (`outcome: noop` on chat turns that attempted a build,
+  tool errors, or a build that shipped no URL in the reply).
+- `preview_content_ok` ≈ 50–60% avg = **hallucination detector**. About half
+  of turns are flagged `minor_issue` or `hallucination` — many are the
+  agent overclaiming ("Done! Your site is live") on chat-phase turns that
+  never should have built. **This is the scorer that drives the regression
+  dataset** (see `/trace grow`).
 
 **When to tighten / loosen budgets:**
 - If `tool_budget_ok` avg stays 1.00 for weeks, tighten (e.g. duration 30→20s).
-- If it drops without a regression, loosen — you're seeing natural variance.
+- If `builder_outcome_ok` avg drops below 0.85 for a day, something shipped
+  bad — open the Logs dashboard filtered by `phase:build` + low score.
 
-**Closing the loop:**
-- Production trace scores poorly → open the span, read `reason` metadata.
-- Add the root-span input to `evals/datasets/regression-v1.ts` if it's a
-  pattern worth pinning. Next PR's replay-scoring catches regressions on it.
-- Fix, push PR, watch the GitHub Actions eval diff scores vs. baseline.
+---
+
+## `/trace grow` — harvest worst traces into the regression dataset
+
+Closes the loop. Takes the past week's lowest-scored production traces and
+upserts them to a Braintrust dataset (`regression-v1`) for replay-regression
+testing. Runs on a **weekly cron** via
+`.github/workflows/grow-regression-dataset.yml` (Mondays 13:00 UTC).
+
+```bash
+cd text.ara.so/backend
+DAYS=7 TOP=40 bun run scripts/grow-regression-dataset.ts            # real write
+DRY_RUN=1 DAYS=7 bun run scripts/grow-regression-dataset.ts         # preview only
+```
+
+**Pain score** ranks candidates:
+`pain = 2·(1−preview_content_ok) + 1·(1−builder_outcome_ok) + 0.5·(1−tool_budget_ok)`, normalized.
+
+Hallucinations weigh 2× because they're the hardest class to catch without
+the LLM judge. Deduped by phase + input-text prefix (first 80 chars,
+lowercased) so we don't add "Cmon" five times.
+
+**Output:** each row in `regression-v1` has:
+- `input.text` — the user message
+- `input.phase` — phase the trace was in
+- `expected` — `{outcome: "ok", url_required: true}` for build turns, looser for others
+- `metadata.trace_id` — BT span id for jumping back to the original
+- `metadata.prior_scores` — what the three scorers said when this turn ran live
+- `metadata.reply_preview` — first 200 chars of what the agent originally said
+- `tags` — `phase:<build|chat|connect|…>`, `source:grower`
+
+**Next step (on PR):** run scorers against this dataset to see if the PR
+fixes anything. Simplest is `bun x braintrust eval evals/trace-scorers.eval.ts`
+pointing at the replayed trace_ids; richer is a full agent replay (expensive —
+needs Blaxel + Linq mocks).
 
 ---
 
@@ -378,9 +417,11 @@ User says "my deploy for fetch-dogs didn't work":
 | `bt view span --object-ref project_logs:<pid> --id <sid>` | Full untruncated span |
 | `bt sql "<query>"` | Ad-hoc SQL across spans |
 | `bt status --json` | Confirm active org/project |
-| `bun run scripts/score-recent-traces.ts N` | Run 3 scorers on last N `webhook.inbound` roots |
+| `bun run scripts/score-recent-traces.ts N` | Run 3 scorers on last N `webhook.inbound` roots (local) |
 | `npx braintrust eval evals/trace-scorers.eval.ts --push` | Ship scorers as a BT experiment |
-| `/opt/homebrew/opt/node@22/bin/node node_modules/.bin/braintrust push evals/push-scorers.ts --if-exists replace` | Push code scorers for online scoring (needs real node, not bun) |
-| BT UI → Logs → Automations → `ara-score-webhook-inbound` | Continuous scoring rule (filter `span_attributes.name = "webhook.inbound"`, 100% sampling) |
+| `/opt/homebrew/opt/node@22/bin/node node_modules/.bin/braintrust push evals/push-scorers.ts --if-exists replace` | Push all 3 scorers for online scoring (needs real node, not bun) |
+| BT UI → Logs → Automations → `ara-score-turns` | Continuous scoring rule (filter `span_attributes.name = "webhook.inbound"`, 100% sampling, all 3 scorers) |
+| `bun run scripts/grow-regression-dataset.ts` | Harvest past-week's worst traces into BT dataset `regression-v1` |
+| `.github/workflows/grow-regression-dataset.yml` | Weekly cron (Mon 13:00 UTC) grows `regression-v1` |
 
 See `/braintrust` for general `bt` CLI reference.
