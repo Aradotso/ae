@@ -2,7 +2,7 @@
 name: trace
 version: 2.5.0
 description: |
-  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace top users` (aggregate: who messaged most in a time window — one latest-turn link per sender, table below), `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), `/trace score`, `/trace online`, or `/trace grow`. **When the user asks for users’ traces / links:** give **one permalink per user** — the **latest** `webhook.inbound` root only. **When they ask for top / busiest users over a time range:** use the **top users table** format (Msgs, User, single review link) — no per-thread “all turns” column unless they ask.
+  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace top users` (aggregate: who messaged most in a time window — one latest-turn link per sender, table below), `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), `/trace score`, `/trace online`, or `/trace grow`. **Use `/align`** to align system prompt and gates to traces and report before/after tables (`skills/align/SKILL.md`). **When the user asks for users’ traces / links:** give **one permalink per user** — the **latest** `webhook.inbound` root only. **When they ask for top / busiest users over a time range:** use the **top users table** format (Msgs, User, single review link) — no per-thread “all turns” column unless they ask.
 allowed-tools:
   - Bash
   - Read
@@ -470,4 +470,5 @@ User says "my deploy for fetch-dogs didn't work":
 | `bun run scripts/grow-regression-dataset.ts` | Harvest past-week's worst traces into BT dataset `regression-v1` |
 | `.github/workflows/grow-regression-dataset.yml` | Weekly cron (Mon 13:00 UTC) grows `regression-v1` |
 
+See `/align` ( **`ara.engineer/skills/align/SKILL.md`** ) for aligning the website-agent system prompt and gates to traces, then testing and **before/after** tables.  
 See `/braintrust` for general `bt` CLI reference.
