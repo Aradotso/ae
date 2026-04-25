@@ -17,8 +17,8 @@
       "url": "https://mcp.ara.engineer",
       "auth": "oauth",
       "allowlist": "@ara.so Google accounts",
-      "tools": ["railway_*", "send_email", "list_emails", "get_email", "search_products", "search_stores", "create_cart", "check_order_status", "generate_video", "check_video_status", "edit_video", "blaxel_*", "engain_*", "linq_*", "postiz_*", "braintrust_*", "axiom_*"],
-      "summary": "Railway (60 tools) + Resend + Instacart + Higgsfield + Blaxel + Engain + Linq + Postiz + Braintrust + Axiom. Resend defaults to hello@ara.so. Railway is pre-loaded with Ara project IDs. Axiom pre-wired to the 'logs' dataset."
+      "tools": ["railway_*", "send_email", "list_emails", "get_email", "search_products", "search_stores", "create_cart", "check_order_status", "generate_video", "check_video_status", "edit_video", "blaxel_*", "engain_*", "linq_*", "braintrust_*", "axiom_*"],
+      "summary": "Railway (60 tools) + Resend + Instacart + Higgsfield + Blaxel + Engain + Linq + Braintrust + Axiom. Resend defaults to hello@ara.so. Railway is pre-loaded with Ara project IDs. Axiom pre-wired to the 'logs' dataset."
     },
     {
       "id": "posthog",
@@ -112,6 +112,16 @@
       "source": "official",
       "client_native": ["claude", "chatgpt"],
       "summary": "Messages, channels, threads, canvas."
+    },
+    {
+      "id": "beeper",
+      "name": "Beeper",
+      "source": "local",
+      "url": "http://localhost:23373/v0/mcp",
+      "auth": "bearer-token",
+      "env": ["BEEPER_TOKEN"],
+      "tools": ["search", "search_chats", "search_messages", "list_messages", "send_message", "get_accounts", "get_chat", "archive_chat", "focus_app", "set_chat_reminder", "clear_chat_reminder", "search_docs"],
+      "summary": "Unified inbox across iMessage, WhatsApp, Twitter/X DMs, Instagram, LinkedIn, Signal, Telegram, etc. Runs locally — each dev runs Beeper Desktop and grabs a token from Settings → Developers, then sets it as a Bearer header. Not hosted on mcp.ara.engineer (Beeper Desktop is per-machine)."
     }
   ],
   "planned": []

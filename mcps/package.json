@@ -1,7 +1,7 @@
 {
   "name": "mcp",
   "version": "1.0.0",
-  "description": "Ara's managed MCP server (mcp.ara.engineer). Railway, Resend, Braintrust, Axiom, Higgsfield, Blaxel, Engain, Linq, Postiz, Instacart.",
+  "description": "Ara's managed MCP server (mcp.ara.engineer). Railway, Resend, Braintrust, Axiom, Higgsfield, Blaxel, Engain, Linq, Instacart.",
   "type": "module",
   "scripts": {
     "start": "bun run src/index.ts",

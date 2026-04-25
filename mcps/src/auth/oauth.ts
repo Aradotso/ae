@@ -15,21 +15,36 @@ const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "";
 
+// Branding shown on Claude/Cursor/etc. connector cards. Pulled from the
+// public ara.engineer site (always live, doesn't depend on this MCP being up).
+const ARA_LOGO_URI = "https://ara.engineer/logo-black.png";
+const ARA_DISPLAY_NAME = "Ara";
+const ARA_DOC_URL = "https://ara.engineer/mcp";
+
 // Only these emails can access the Ara MCP
 const ALLOWED_EMAILS = ["adi@ara.so", "sven@ara.so"];
 
 const router = Router();
 
 // ─── Discovery: RFC 9728 Protected Resource Metadata ───
+// Branding fields (resource_name, resource_documentation, logo_uri) are
+// extensions used by Claude, Cursor, and other MCP clients to render the
+// connector card with the right name + logo instead of a generated "A"
+// placeholder.
 router.get("/.well-known/oauth-protected-resource", (_req, res) => {
   res.json({
     resource: BASE_URL,
+    resource_name: ARA_DISPLAY_NAME,
+    resource_documentation: ARA_DOC_URL,
+    logo_uri: ARA_LOGO_URI,
     authorization_servers: [BASE_URL],
     bearer_methods_supported: ["header"],
   });
 });
 
 // ─── Discovery: RFC 8414 Authorization Server Metadata ───
+// logo_uri / op_uri are picked up by some clients (notably Claude) to brand
+// the consent screen and connector list.
 router.get("/.well-known/oauth-authorization-server", (_req, res) => {
   res.json({
     issuer: BASE_URL,
@@ -41,6 +56,10 @@ router.get("/.well-known/oauth-authorization-server", (_req, res) => {
     token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
     code_challenge_methods_supported: ["S256"],
     scopes_supported: ["mcp:tools", "mcp:prompts", "mcp:resources"],
+    op_policy_uri: ARA_DOC_URL,
+    op_tos_uri: ARA_DOC_URL,
+    logo_uri: ARA_LOGO_URI,
+    service_documentation: ARA_DOC_URL,
   });
 });
 

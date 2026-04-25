@@ -11,7 +11,6 @@ import { registerBlaxelTools } from "./tools/blaxel.js";
 import { registerResendTools } from "./tools/resend.js";
 import { registerEngainTools } from "./tools/engain.js";
 import { registerLinqTools } from "./tools/linq.js";
-import { registerPostizTools } from "./tools/postiz.js";
 import { registerBraintrustTools } from "./tools/braintrust.js";
 import { registerAxiomTools } from "./tools/axiom.js";
 import { registerInfisicalTools } from "./tools/infisical.js";
@@ -72,7 +71,6 @@ value isn't in Infisical, THEN ask the user.
 - **Blaxel** (\`blaxel_*\`) — agent deployment.
 - **Engain** (\`engain_*\`) — leads / outbound.
 - **Linq** (\`linq_*\`) — messaging.
-- **Postiz** (\`postiz_*\`) — social scheduling.
 - **Braintrust** (\`braintrust_*\`) — eval experiments, trace logs, datasets, prompts.
 - **Axiom** (\`axiom_query\`, \`axiom_tail_logs\`, \`axiom_list_datasets\`) — Ara logs
   (\`logs\` dataset). Use \`axiom_tail_logs\` for ad-hoc debugging.
@@ -140,7 +138,7 @@ const sessions = new Map<string, { server: McpServer; transport: StreamableHTTPS
 function createMcpSession(): { server: McpServer; transport: StreamableHTTPServerTransport } {
   const server = new McpServer(
     {
-      name: "ara-mcp",
+      name: "Ara",
       version: "1.0.0",
     },
     {
@@ -155,7 +153,6 @@ function createMcpSession(): { server: McpServer; transport: StreamableHTTPServe
   registerResendTools(server);
   registerEngainTools(server);
   registerLinqTools(server);
-  registerPostizTools(server);
   registerBraintrustTools(server);
   registerAxiomTools(server);
   registerInfisicalTools(server);
