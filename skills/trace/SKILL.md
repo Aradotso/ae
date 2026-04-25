@@ -2,7 +2,7 @@
 name: trace
 version: 2.5.0
 description: |
-  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace top users` (aggregate: who messaged most in a time window — one latest-turn link per sender, table below), `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `website-agent/scripts/bt_e2e.ts`), `/trace score`, `/trace online`, or `/trace grow`. **Use `/align`** to align system prompt and gates to traces and report before/after tables (`skills/align/SKILL.md`). **When the user asks for users’ traces / links:** give **one permalink per user** — the **latest** `webhook.inbound` root only. **When they ask for top / busiest users over a time range:** use the **top users table** format (Msgs, User, single review link) — no per-thread “all turns” column unless they ask.
+  Ara agent-trace debugging — inspect Braintrust traces for the website-agent (TS/Bun, Cerebras, Vercel AI SDK v6). Invoked as `/trace recent`, `/trace turn <turn_id>`, `/trace convo <chat_id>`, `/trace user <phone>`, `/trace top users` (aggregate: who messaged most in a time window — one latest-turn link per sender, table below), `/trace tool <name>`, `/trace span <id>`, `/trace <url>`, `/trace test` (run canonical e2e via `text.ara.so/backend/scripts/e2e.ts` (`bun run e2e --target=local --scenarios=<name>`)), `/trace score`, `/trace online`, or `/trace grow`. **Use `/align`** to align system prompt and gates to traces and report before/after tables (`skills/align/SKILL.md`). **When the user asks for users’ traces / links:** give **one permalink per user** — the **latest** `webhook.inbound` root only. **When they ask for top / busiest users over a time range:** use the **top users table** format (Msgs, User, single review link) — no per-thread “all turns” column unless they ask.
 allowed-tools:
   - Bash
   - Read
@@ -258,13 +258,13 @@ Re-runs the signed Linq webhook → full span tree verification. Three kinds:
 ```bash
 cd website-agent
 # connect flow (CONNECT <token>)
-bun scripts/bt_e2e.ts connect
+bun run e2e --target=local --scenarios=chat   # (connect scenario TBD; chat is closest cheap path)
 
 # conversational (no tools, just reply)
-bun scripts/bt_e2e.ts build
+bun run e2e --target=local --scenarios=chat
 
 # tools flow (creates site, writes files, reads dev logs)
-bun scripts/bt_e2e.ts tools
+bun run e2e --target=local --scenarios=build
 ```
 
 Script writes a unique `chat_id` + `msg_id`, sends signed HMAC webhook, waits
@@ -293,8 +293,8 @@ takes a `webhook.inbound` root span and returns `{score: 0..1, reason, metadata}
 
 ```bash
 cd text.ara.so/backend
-bun run scripts/score-recent-traces.ts 30                 # 30 most recent turns
-LIMIT=50 WINDOW=24h bun run scripts/score-recent-traces.ts
+bun run e2e --replay=2h --limit=30                 # 30 most recent turns
+bun run e2e --replay=24h --limit=50
 ```
 
 Prints per-scorer histogram, mean/p50/std, and pearson correlation + precision/recall
@@ -463,7 +463,7 @@ User says "my deploy for fetch-dogs didn't work":
 | `bt view span --object-ref project_logs:<pid> --id <sid>` | Full untruncated span |
 | `bt sql "<query>"` | Ad-hoc SQL across spans |
 | `bt status --json` | Confirm active org/project |
-| `bun run scripts/score-recent-traces.ts N` | Run 3 scorers on last N `webhook.inbound` roots (local) |
+| `bun run e2e --replay=<window> --limit=N` | Run 3 scorers on last N `webhook.inbound` roots (local) |
 | `npx braintrust eval evals/trace-scorers.eval.ts --push` | Ship scorers as a BT experiment |
 | `/opt/homebrew/opt/node@22/bin/node node_modules/.bin/braintrust push evals/push-scorers.ts --if-exists replace` | Push all 3 scorers for online scoring (needs real node, not bun) |
 | BT UI → Logs → Automations → `ara-score-turns` | Continuous scoring rule (filter `span_attributes.name = "webhook.inbound"`, 100% sampling, all 3 scorers) |

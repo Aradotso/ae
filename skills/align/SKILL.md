@@ -2,7 +2,7 @@
 name: align
 version: 1.0.0
 description: |
-  Align the website-agent (system prompt + routing) with successful on-Ara website building; analyze Braintrust traces for derailment (wrong phase, local-dev tutoring, missing deploy, paywall/connect confusion), patch `text.ara.so/backend` (primarily `system-prompt.ts`), then verify in a tight loop—`bt` / Braintrust evals / `score-recent-traces` / `bt_e2e`—and report a before vs after fit table. Invoked as `/align`, `/align <trace url>`, `/align users …` (pair with `/trace` to gather traces). Companion to `/trace`.
+  Align the website-agent (system prompt + routing) with successful on-Ara website building; analyze Braintrust traces for derailment (wrong phase, local-dev tutoring, missing deploy, paywall/connect confusion), patch `text.ara.so/backend` (primarily `system-prompt.ts`), then verify in a tight loop—`bt` / Braintrust evals / `bun run e2e` (replay + live)—and report a before vs after fit table. Invoked as `/align`, `/align <trace url>`, `/align users …` (pair with `/trace` to gather traces). Companion to `/trace`.
 allowed-tools:
   - Bash
   - Read
@@ -74,12 +74,12 @@ Record **1–3 concrete failure hypotheses** per trace before editing code.
 
 1. **Baseline** — for each trace or scenario id, record:
    - `span_id` or permalink
-   - Relevant **scores** if present: `builder_outcome_ok`, `tool_budget_ok`, `preview_content_ok` (from Logs UI or `score-recent-traces` / `bt view span`)
+   - Relevant **scores** if present: `builder_outcome_ok`, `tool_budget_ok`, `preview_content_ok` (from Logs UI, `bun run e2e --replay=<window>`, or `bt view span`)
    - One line: **“task fit”** (aligned / partial / misfit) from reading user text vs tools vs reply
 2. **Patch** — minimal diff to `system-prompt.ts` (and only elsewhere if needed).
 3. **Local / CI verification** (pick what fits; run in `text.ara.so/backend`):
-   - `bun run scripts/bt_e2e.ts tools` (or `build` / `connect`) for smoke
-   - `bun run scripts/score-recent-traces.ts N` on **saved** export or recent prod IDs (if the script supports passing IDs; else re-score after deploy)
+   - `bun run e2e --target=local --scenarios=build` (or `chat` / `edit` / `deploy`) for smoke
+   - `bun run e2e --replay=<window> --limit=N` on recent prod traces (read-only, no agent runs)
    - `npx braintrust eval` on a small eval that mirrors the **failure class** (add a row to an eval or dataset if you need a stable replay)
 4. **After deploy to Railway** (if required for apples-to-apples prod traces): re-run the **same** user scenario or a **synthetic** replay with the same user message text; pull the **new** `webhook.inbound` trace.
 
@@ -122,7 +122,7 @@ When `/align` finishes a slice of work, present a table sorted by **severity** o
 | 1. Ingest | `bt view trace` / `/trace` permalinks; optional `conversation:…` search for multi-turn |
 | 2. Diagnose | Map tags, phase, tools, user text to derailment patterns above |
 | 3. Edit | `system-prompt.ts` first; then `server` / `run-builder` if phase bug |
-| 4. Verify | `bt_e2e`, `score-recent-traces`, `braintrust eval`, redeploy + replay |
+| 4. Verify | `bun run e2e --target=local`, `bun run e2e --replay=<window>`, `braintrust eval`, redeploy + replay |
 | 5. Report | Before/after table with fit + scores |
 
 ---
@@ -131,4 +131,4 @@ When `/align` finishes a slice of work, present a table sorted by **severity** o
 
 - “`/align` this trace: `https://www.braintrust.dev/...` — user wanted a landing page but the model sent git instructions.”
 - “`/align` top 3 message-count users from yesterday — any systematic tutor-derail; propose one prompt edit.”
-- “After changing `system-prompt.ts`, run `bun run scripts/score-recent-traces.ts 20` and show before/after for the same trace IDs (from export).”
+- “After changing `system-prompt.ts`, run `bun run e2e --replay=2h --limit=20` and show before/after for the same trace IDs (from export).”
